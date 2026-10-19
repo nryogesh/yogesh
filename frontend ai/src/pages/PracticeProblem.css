@@ -1,0 +1,11 @@
+.generated-problem{margin:20px 0;padding:22px 24px;color:var(--text)}
+.generated-problem-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.generated-problem-heading h3{margin:6px 0 0;font-size:19px}
+.generated-problem-description{margin:18px 0;color:var(--muted);font-size:13px;line-height:1.7;white-space:pre-wrap}
+.generated-problem h4{margin:18px 0 8px;font-size:12px}
+.generated-problem ul,.generated-problem ol{margin:0;padding-left:20px;color:var(--muted);font-size:12px;line-height:1.8}
+.generated-example{margin:10px 0;padding:12px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.generated-example p{margin:3px 0;color:var(--muted)}
+.generated-example strong{color:var(--text)}
+.problem-error{margin:14px 0;color:var(--error);font-size:13px}
+@media(max-width:600px){.generated-problem{padding:18px}.generated-problem-heading h3{font-size:17px}}

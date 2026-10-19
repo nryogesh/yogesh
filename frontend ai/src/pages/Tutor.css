@@ -1,0 +1,10 @@
+.message-content .tutor-formatted{color:var(--text);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.message-content .tutor-formatted p{margin:0;white-space:pre-wrap}
+.message-content .tutor-formatted p+p{margin-top:8px}
+.message-content .tutor-formatted ul,.message-content .tutor-formatted ol{display:grid;gap:5px;margin:4px 0;padding-left:22px;font-size:12px}
+.message-content .tutor-formatted h3,.message-content .tutor-formatted h4,.message-content .tutor-formatted h5{margin:8px 0 4px;color:var(--text);font-size:12px;line-height:1.5}
+.message-content .tutor-formatted pre{margin:8px 0;padding:12px;overflow-x:auto;border:1px solid var(--border);border-radius:5px;background:var(--raised);white-space:pre}
+.message-content .tutor-formatted pre code,.message-content .tutor-formatted code{font-family:var(--mono);font-size:.92em}
+.message-content .tutor-formatted :not(pre)>code{padding:1px 4px;border-radius:3px;background:var(--raised)}
+.message-row.user .user-message-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.message-content .fallback-label{color:var(--accent)}

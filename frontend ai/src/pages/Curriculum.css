@@ -1,0 +1,119 @@
+.curriculum-layout{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);align-items:start;gap:16px}
+.curriculum-directory,.curriculum-content{min-width:0;border:1px solid var(--border);background:var(--surface);border-radius:7px}
+.curriculum-directory{padding:8px}
+.curriculum-topic-link{width:100%;display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px 8px;border:0;border-radius:5px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.curriculum-topic-link:hover,.curriculum-topic-link.selected{background:var(--raised)}
+.curriculum-topic-link.selected{box-shadow:inset 2px 0 var(--accent)}
+.curriculum-topic-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:5px;background:var(--raised);color:var(--accent)}
+.curriculum-topic-copy{min-width:0;display:grid;gap:3px}
+.curriculum-topic-copy strong{font-size:12px;overflow-wrap:anywhere}
+.curriculum-topic-copy small{color:var(--muted);font-size:10px;text-transform:capitalize}
+.curriculum-status{padding:4px 6px;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:9px;white-space:nowrap}
+.curriculum-status.published{border-color:rgba(251,191,36,.3);color:var(--accent)}
+.curriculum-status.planned{color:var(--muted)}
+.curriculum-content{padding:22px 24px;color:var(--text)}
+.curriculum-lesson-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.curriculum-lesson-header h3,.curriculum-unavailable h3{margin:5px 0 8px;font-size:23px}
+.curriculum-lesson-header>div>p:last-child,.curriculum-section p,.curriculum-section li,.curriculum-unavailable p{color:var(--muted);font-size:12px;line-height:1.7}
+.curriculum-section{padding:18px 0;border-bottom:1px solid var(--border)}
+.curriculum-section:last-child{border-bottom:0}
+.curriculum-section h4{margin:0 0 11px;font-size:14px}
+.curriculum-section h5{margin:12px 0 5px;font-size:12px}
+.curriculum-section ul,.curriculum-section ol{margin:0;padding-left:20px}
+.curriculum-lesson-section+.curriculum-lesson-section{margin-top:10px}
+.curriculum-dry-run{margin:12px 0 0;padding:11px 12px;border-left:2px solid var(--accent);background:var(--raised)}
+.curriculum-dry-run strong,.curriculum-complexity{color:var(--text)!important}
+.curriculum-links{display:grid;gap:7px;margin-top:14px}
+.curriculum-links a{display:flex;justify-content:space-between;gap:12px;color:var(--accent);font-size:12px;overflow-wrap:anywhere}
+.curriculum-links a span{color:var(--muted);font-size:10px}
+.curriculum-assignment{padding:14px 0}
+.curriculum-assignment+.curriculum-assignment,.curriculum-question+.curriculum-question{border-top:1px solid var(--border)}
+.curriculum-assignment-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.curriculum-assignment-heading h5{margin:0;font-size:13px}
+.curriculum-assignment-heading span{color:var(--muted);font-size:10px;text-transform:capitalize}
+.curriculum-assignment .generated-example{margin:10px 0}
+.curriculum-complexity{font-size:11px!important}
+.curriculum-question{padding:12px 0}
+.curriculum-question h5{margin-top:0}
+.curriculum-state{padding:22px;color:var(--muted);font-size:13px;line-height:1.6}
+.workspace-disclaimer{margin:6px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+.curriculum-directory>.curriculum-state{padding:12px}
+.curriculum-error{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid rgba(252,165,165,.3);border-radius:6px;color:var(--error)}
+.curriculum-unavailable{padding:8px 0}
+.curriculum-unavailable .eyebrow{color:var(--accent)}
+@media(max-width:850px){.curriculum-layout{grid-template-columns:1fr}.curriculum-directory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.curriculum-directory>.curriculum-state{grid-column:1/-1}}
+@media(max-width:560px){.curriculum-directory{grid-template-columns:1fr}.curriculum-content{padding:18px}.curriculum-topic-link{grid-template-columns:30px minmax(0,1fr) auto}.curriculum-lesson-header{display:block}.curriculum-lesson-header>.curriculum-status{display:inline-block;margin-top:12px}.curriculum-error{align-items:flex-start;flex-direction:column}}
+.curriculum-status.state-locked{color:var(--error);border-color:rgba(252,165,165,.35);text-transform:capitalize}
+.curriculum-status.state-available{color:var(--accent);border-color:rgba(251,191,36,.35);text-transform:capitalize}
+.curriculum-status.state-in-progress{color:var(--accent);border-color:rgba(251,191,36,.35);text-transform:capitalize}
+.curriculum-status.state-completed{color:var(--success);border-color:rgba(134,239,172,.35);text-transform:capitalize}
+.roadmap-learning-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.roadmap-learning-item{display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;padding:17px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+.roadmap-learning-item .roadmap-marker{width:30px;height:30px}
+.roadmap-learning-copy{min-width:0}
+.roadmap-learning-copy h3{margin:0;font-size:15px}
+.roadmap-learning-copy p{margin:8px 0;color:var(--muted);font-size:12px;line-height:1.6}
+.roadmap-learning-copy .curriculum-lesson-header{padding-bottom:10px}
+.curriculum-quiz-question{display:grid;gap:8px;margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:5px}
+.curriculum-quiz-question legend{padding:0 4px;color:var(--text);font-size:12px}
+.curriculum-quiz-question label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.curriculum-quiz-question input{accent-color:var(--accent)}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.status-dot.state-locked{background:var(--error)}
+.status-dot.state-available{background:var(--accent)}
+.status-dot.state-in-progress{background:var(--accent)}
+.status-dot.state-completed{background:var(--accent)}
+.summary-stat span:not(.summary-icon){text-transform:capitalize}
+.topic-progress-panel{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:15px;margin:18px 0;border:1px solid var(--border);border-radius:6px;background:var(--raised)}
+.topic-progress-panel>strong{font-size:13px}
+.topic-progress-panel>p{flex:1 1 100%;margin:0;color:var(--muted);font-size:12px}
+.topic-progress-panel .primary-button,.topic-progress-panel .quiet-button{width:max-content}
+.topic-concept-card{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;margin:12px 0;padding:14px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+.topic-step-number{width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--accent);font:12px var(--mono)}
+.topic-concept-card h5,.worked-example-card h5{margin:3px 0 7px}
+.topic-concept-card p{margin:0}
+.worked-example-card{padding:16px;border:1px solid rgba(251,191,36,.3);border-left:3px solid var(--accent);border-radius:6px;background:var(--surface)}
+.worked-example-card ol{display:grid;gap:8px}
+.topic-notes ul{display:grid;gap:10px;padding:0;list-style:none}
+.topic-notes li{position:relative;padding:10px 12px 10px 30px;border-radius:5px;background:var(--raised)}
+.topic-notes li::before{position:absolute;left:12px;color:var(--accent);content:'•'}
+.topic-difficulty-group{margin:14px 0;padding:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+.topic-difficulty-group h5{margin:0 0 10px}
+.topic-difficulty-group ul{display:grid;gap:7px}
+.topic-difficulty-group>p{margin:0}
+.topic-tutor{padding-bottom:8px}
+.topic-tutor .primary-button{width:max-content;margin-top:5px}
+.curriculum-unavailable .text-button{display:inline-flex;vertical-align:baseline}
+.topic-difficulty-group .difficulty.beginner{color:var(--accent);background:var(--soft)}
+.topic-difficulty-group .difficulty.intermediate{color:var(--accent);background:var(--soft)}
+.topic-difficulty-group .difficulty.advanced{color:var(--accent);background:var(--soft)}
+@media(max-width:560px){.topic-progress-panel{align-items:stretch;flex-direction:column}.topic-progress-panel .primary-button,.topic-progress-panel .quiet-button,.topic-tutor .primary-button{width:100%}}
+.practice-curriculum-layout{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);align-items:start;gap:16px}
+.practice-assignment-picker{display:grid;gap:5px;max-height:720px;overflow:auto;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+.practice-assignment-option{display:grid;gap:5px;padding:11px 10px;border:0;border-radius:5px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.practice-assignment-option:hover,.practice-assignment-option.selected{background:var(--raised)}
+.practice-assignment-option.selected{box-shadow:inset 2px 0 var(--accent)}
+.practice-assignment-option small{color:var(--muted);font-size:10px;text-transform:capitalize}
+.practice-assignment-option strong{font-size:12px;line-height:1.45}
+.practice-assignment-detail{min-width:0;padding:22px 24px}
+.practice-assignment-detail .curriculum-lesson-header{margin-bottom:0}
+.practice-assignment-detail .curriculum-lesson-header h3{overflow-wrap:anywhere}
+.practice-assignment-detail .difficulty{display:inline-block;margin-top:8px;padding:3px 7px;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;text-transform:capitalize}
+.practice-hint-heading,.practice-hint-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.practice-hint-heading h4{margin-bottom:0}
+.practice-hint-heading span{color:var(--muted);font-size:10px}
+.practice-hint{margin:12px 0 0;padding:10px 12px;border-left:2px solid var(--accent);background:var(--raised);color:var(--text)!important}
+.practice-hint.tutor{border-left-color:var(--accent)}
+.practice-hint-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:14px}
+.practice-assignment-detail .generated-example{margin:10px 0}
+.submission-editor-label{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;color:var(--text);font-size:12px}
+.submission-editor-label span{color:var(--muted);font-size:10px}
+.java-submission-editor{width:100%;min-height:260px;resize:vertical;padding:13px;border:1px solid var(--border);border-radius:5px;background:var(--input-bg);color:var(--text);font:12px/1.6 var(--mono);tab-size:4}
+.java-submission-editor:focus{outline:2px solid var(--accent);outline-offset:1px}
+.submission-result{margin-top:14px;padding:13px;border:1px solid var(--border);border-radius:5px;background:var(--raised);font-size:12px}
+.submission-result.passed{border-color:rgba(134,239,172,.4)}
+.submission-result.failed{border-color:rgba(252,165,165,.4)}
+.submission-result strong{text-transform:capitalize}
+.submission-result p{margin:7px 0 0;color:var(--muted);line-height:1.6}
+@media(max-width:850px){.practice-curriculum-layout{grid-template-columns:1fr}.practice-assignment-picker{grid-template-columns:repeat(2,minmax(0,1fr));max-height:320px}}
+@media(max-width:560px){.practice-assignment-picker{grid-template-columns:1fr}.practice-assignment-detail{padding:18px}.practice-hint-actions{align-items:stretch;flex-direction:column}.practice-hint-actions button{width:100%}}
