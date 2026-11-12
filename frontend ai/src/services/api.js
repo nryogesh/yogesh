@@ -45,6 +45,21 @@ export async function fetchSubmissionStarter(assignmentId) {
   return data
 }
 
+export async function fetchSubmissionSolution(assignmentId) {
+  const response = await fetch(`${API_BASE_URL}/api/submissions/${encodeURIComponent(assignmentId)}/solution`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok || data?.success !== true || typeof data.sourceCode !== 'string') {
+    throw new Error(data?.error || 'Could not load the requested reference solution')
+  }
+
+  return data
+}
+
 export async function runJavaAssignment(assignmentId, source, customInput = null) {
   const response = await fetch(`${API_BASE_URL}/api/submissions/${encodeURIComponent(assignmentId)}/run`, {
     method: 'POST',

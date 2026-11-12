@@ -2,7 +2,7 @@ import express from 'express'
 import { dsaTopics } from '../data/topics.js'
 import { javaEvaluationCases } from '../data/evaluation-cases.js'
 import { SubmissionInputError } from '../models/submission.js'
-import { SubmissionService } from '../services/submission-service.js'
+import { getJavaSubmissionSolution, getJavaSubmissionStarter, SubmissionService } from '../services/submission-service.js'
 
 function createSubmissionsRouter(submissionService = new SubmissionService()) {
   const router = express.Router()
@@ -20,7 +20,7 @@ function createSubmissionsRouter(submissionService = new SubmissionService()) {
       return response.status(404).json({ success: false, error: 'Assignment was not found' })
     }
 
-    const starterCode = fixture?.starterCode || null
+    const starterCode = getJavaSubmissionStarter(assignmentId)
     const evaluationStatus = await submissionService.getEvaluationStatus(assignmentId)
 
     return response.json({
@@ -34,6 +34,19 @@ function createSubmissionsRouter(submissionService = new SubmissionService()) {
       starterCode,
       samples: fixture?.samples || [],
     })
+  })
+
+  router.post('/:assignmentId/solution', (request, response) => {
+    if (request.body?.confirm !== true) {
+      return response.status(400).json({ success: false, error: 'Confirm that you want to reveal the solution.' })
+    }
+
+    const sourceCode = getJavaSubmissionSolution(request.params.assignmentId)
+    if (!sourceCode) {
+      return response.status(404).json({ success: false, error: 'A reference solution is not available for this assignment.' })
+    }
+
+    return response.json({ success: true, sourceCode })
   })
 
   router.post('/:assignmentId/run', async (request, response) => {

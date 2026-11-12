@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOpen,
   BrainCircuit,
@@ -82,6 +82,10 @@ export default function Layout({ children }) {
 
   if (location.pathname === '/login' || location.pathname === '/signup') {
     return <main className="auth-shell">{children}</main>
+  }
+
+  if (!profile) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
   return <div className="app-shell"><Sidebar collapsed={collapsed} setCollapsed={setCollapsed} open={open} setOpen={setOpen} /><div className="shell-main"><Navbar onMenu={() => setOpen(true)} profile={profile} /><main className="page-content">{children}</main></div>{open && <button className="drawer-scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}</div>

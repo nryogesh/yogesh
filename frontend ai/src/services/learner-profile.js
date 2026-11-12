@@ -8,23 +8,17 @@ export const DEFAULT_DEMO_PROFILE = {
   avatarInitials: 'AR',
   avatarGradient: 'linear-gradient(135deg, #f59e0b, #b45309)',
   learningGoal: 'Master Java Data Structures & Algorithms for Technical Interviews',
-  level: 'Intermediate Learner',
+  level: 'Beginner Learner',
   targetCompany: 'Google, Amazon, Meta',
   badge: 'Java Knight 🛡️',
-  xp: 1450,
-  streak: 5,
-  solvedCount: 12,
-  attemptedCount: 15,
-  accuracy: 80,
+  xp: 0,
+  streak: 0,
+  solvedCount: 0,
+  attemptedCount: 0,
+  accuracy: null,
   createdAt: '2026-11-01T08:00:00.000Z',
   isDemo: true,
-  sampleActivity: [
-    { id: 'sample-1', type: 'assignment-passed', title: 'Sum of Array Elements', topic: 'Programming Fundamentals', at: '2026-11-09T14:30:00Z', isSample: true },
-    { id: 'sample-2', type: 'quiz-passed', title: 'Programming Fundamentals Quiz', topic: 'Programming Fundamentals', at: '2026-11-09T15:10:00Z', isSample: true },
-    { id: 'sample-3', type: 'visualization-explored', title: 'Array Insertion & Shifting', topic: 'Arrays', at: '2026-11-10T10:20:00Z', isSample: true },
-    { id: 'sample-4', type: 'assignment-passed', title: 'Binary Search in Sorted Array', topic: 'Searching', at: '2026-11-11T16:45:00Z', isSample: true },
-    { id: 'sample-5', type: 'concept-viewed', title: 'Two Pointers Opposite Direction', topic: 'Two Pointers', at: '2026-11-12T09:00:00Z', isSample: true },
-  ],
+  sampleActivity: [],
   realActivity: [],
 }
 
@@ -34,7 +28,7 @@ export function loadLearnerProfile() {
 
   try {
     const profile = JSON.parse(stored)
-    if (!profile || typeof profile !== 'object') return null
+    if (!profile || typeof profile !== 'object' || profile.authenticated !== true) return null
 
     return {
       ...DEFAULT_DEMO_PROFILE,
@@ -47,7 +41,7 @@ export function loadLearnerProfile() {
       sampleActivity: Array.isArray(profile.sampleActivity) ? profile.sampleActivity : DEFAULT_DEMO_PROFILE.sampleActivity,
     }
   } catch {
-    return DEFAULT_DEMO_PROFILE
+    return null
   }
 }
 
@@ -55,10 +49,15 @@ export function saveLearnerProfile(updates = {}) {
   const existing = loadLearnerProfile() || DEFAULT_DEMO_PROFILE
   const normalizedName = String(updates.displayName ?? existing.displayName).trim()
   const normalizedGoal = String(updates.learningGoal ?? existing.learningGoal).trim()
+  if (!normalizedName) throw new Error('A display name is required.')
+  if (normalizedName.length > 60) throw new Error('Display name must be 60 characters or fewer.')
+  if (!normalizedGoal) throw new Error('A learning goal is required.')
+  if (normalizedGoal.length > 120) throw new Error('Learning goal must be 120 characters or fewer.')
 
   const profile = {
     ...existing,
     ...updates,
+    authenticated: true,
     displayName: normalizedName || DEFAULT_DEMO_PROFILE.displayName,
     learningGoal: normalizedGoal || DEFAULT_DEMO_PROFILE.learningGoal,
     avatarInitials: (normalizedName || DEFAULT_DEMO_PROFILE.displayName)
@@ -78,6 +77,7 @@ export function saveLearnerProfile(updates = {}) {
 export function createDefaultDemoProfile(customName = 'Alex Rivers') {
   const profile = {
     ...DEFAULT_DEMO_PROFILE,
+    authenticated: true,
     displayName: customName,
     avatarInitials: customName.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2),
     createdAt: new Date().toISOString(),
@@ -107,7 +107,7 @@ export function recordUserActivity({ type, id, title, topic, status = 'passed' }
     realActivity,
     solvedCount: (profile.solvedCount || 0) + solvedDelta,
     attemptedCount: (profile.attemptedCount || 0) + attemptedDelta,
-    xp: (profile.xp || 1450) + (status === 'passed' ? 50 : 10),
+    xp: (profile.xp ?? 0) + (status === 'passed' ? 50 : 10),
   })
 }
 

@@ -263,14 +263,14 @@ function Practice() {
   const refreshData = () => {
     const currentProgress = loadLearningProgress()
     setProgress(currentProgress)
-    fetchCurriculum(currentProgress)
+    fetchCurriculum()
       .then(setCurriculum)
       .catch((err) => setError(err.message || 'Could not load practice curriculum.'))
   }
 
   useEffect(() => {
     let active = true
-    fetchCurriculum(loadLearningProgress())
+    fetchCurriculum()
       .then((topics) => {
         if (!active) return
         setCurriculum(topics)
@@ -306,8 +306,8 @@ function Practice() {
     <div className="workspace-page page-enter">
       <PageHeader
         eyebrow="Practice & Assessment"
-        title="Java DSA Practice Workspace"
-        description="Write and test your solutions with real Java 17 execution. Traced step-by-step with problem visualizers."
+        title="DSA Practice Session"
+        description="Choose Easy, Intermediate, or Difficult challenges. Java evaluation is enabled only for assignments with registered test cases."
       />
       <PracticeWorkspace
         curriculum={curriculum}

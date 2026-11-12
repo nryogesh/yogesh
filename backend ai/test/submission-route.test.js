@@ -30,7 +30,7 @@ async function withSubmissionServer(run, router = submissionsRouter) {
   }
 }
 
-test('submission starter route exposes no sample or hidden evaluation cases', async () => {
+test('submission starter route exposes an unfinished template, never the reference implementation or hidden tests', async () => {
   await withSubmissionServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/pf-assignment-1`)
     const payload = await response.json()
@@ -38,10 +38,32 @@ test('submission starter route exposes no sample or hidden evaluation cases', as
     assert.equal(response.status, 200)
     assert.equal(payload.assignmentId, 'pf-assignment-1')
     assert.equal(payload.language, 'Java')
-    assert.equal(payload.evaluationAvailable, false)
-    assert.match(payload.evaluationMessage, /JAVA_SANDBOX_URL.*JAVA_SANDBOX_TOKEN/i)
     assert.match(payload.starterCode, /class Solution/)
+    assert.match(payload.starterCode, /TODO: implement this method/)
+    assert.doesNotMatch(payload.starterCode, /int total = 0|total \+= val/)
     assert.doesNotMatch(JSON.stringify(payload), /referenceSolution|answerKey|testCases|expectedOutput|hiddenCases/)
+  })
+})
+
+test('reference solution is returned only after explicit confirmation', async () => {
+  await withSubmissionServer(async (baseUrl) => {
+    const declined = await fetch(`${baseUrl}/pf-assignment-1/solution`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: false }),
+    })
+    assert.equal(declined.status, 400)
+    assert.doesNotMatch(await declined.text(), /int total = 0/)
+
+    const confirmed = await fetch(`${baseUrl}/pf-assignment-1/solution`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    })
+    const payload = await confirmed.json()
+    assert.equal(confirmed.status, 200)
+    assert.equal(payload.success, true)
+    assert.match(payload.sourceCode, /int total = 0/)
   })
 })
 

@@ -68,5 +68,37 @@ export class SubmissionService {
 }
 
 export function getJavaSubmissionStarter(assignmentId) {
+  const fixture = javaEvaluationCases[assignmentId]
+  if (!fixture?.starterCode) return null
+
+  const methodName = fixture.methodName
+  const methodPattern = new RegExp(`public\\s+([\\w.<>, ?\\[\\]]+)\\s+${methodName}\\s*\\(([^)]*)\\)\\s*\\{`)
+  const method = methodPattern.exec(fixture.starterCode)
+  if (!method) {
+    throw new SubmissionServiceError(`Could not create a safe starter template for ${assignmentId}.`, 500)
+  }
+
+  const returnType = method[1].trim()
+  const imports = fixture.starterCode
+    .split(/\r?\n/)
+    .filter((line) => /^\s*import\s+[^;]+;\s*$/.test(line))
+  const defaultReturn = {
+    boolean: 'return false;',
+    byte: 'return 0;',
+    short: 'return 0;',
+    int: 'return 0;',
+    long: 'return 0L;',
+    float: 'return 0.0f;',
+    double: 'return 0.0;',
+    char: "return '\\0';",
+  }[returnType]
+  const body = returnType === 'void'
+    ? '// TODO: implement this method.'
+    : `// TODO: implement this method.\n        ${defaultReturn || 'return null;'}`
+
+  return `${imports.length ? `${imports.join('\n')}\n\n` : ''}class Solution {\n    public ${returnType} ${methodName}(${method[2]}) {\n        ${body}\n    }\n}`
+}
+
+export function getJavaSubmissionSolution(assignmentId) {
   return javaEvaluationCases[assignmentId]?.starterCode || null
 }

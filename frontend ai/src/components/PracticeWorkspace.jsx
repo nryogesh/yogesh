@@ -16,7 +16,8 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
-import { fetchSubmissionStarter, runJavaAssignment, submitJavaAssignment } from '../services/api'
+import { fetchSubmissionSolution, fetchSubmissionStarter, runJavaAssignment, submitJavaAssignment } from '../services/api'
+import { getLearningStreak, loadLearningProgress, recordAssignmentAttempt, saveLearningProgress } from '../services/learning-progress'
 import { recordUserActivity } from '../services/learner-profile'
 import PracticeProblemVisualizer from './PracticeProblemVisualizer'
 
@@ -36,6 +37,7 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
   if (selectedProblem) {
     return (
       <ProblemDetailWorkspace
+        key={selectedProblem.id}
         problem={selectedProblem}
         onBack={() => setSelectedProblemId(null)}
         progress={progress}
@@ -60,10 +62,10 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
 
   // Sort
   if (sortBy === 'difficulty-asc') {
-    const diffOrder = { beginner: 1, easy: 1, intermediate: 2, medium: 2, advanced: 3, hard: 3 }
+    const diffOrder = { easy: 1, intermediate: 2, difficult: 3 }
     filteredProblems.sort((a, b) => (diffOrder[a.difficulty] || 2) - (diffOrder[b.difficulty] || 2))
   } else if (sortBy === 'difficulty-desc') {
-    const diffOrder = { beginner: 1, easy: 1, intermediate: 2, medium: 2, advanced: 3, hard: 3 }
+    const diffOrder = { easy: 1, intermediate: 2, difficult: 3 }
     filteredProblems.sort((a, b) => (diffOrder[b.difficulty] || 2) - (diffOrder[a.difficulty] || 2))
   } else if (sortBy === 'title') {
     filteredProblems.sort((a, b) => a.title.localeCompare(b.title))
@@ -72,9 +74,19 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
   // Practice stats
   const solvedCount = allProblems.filter((p) => p.isSolved).length
   const attemptedCount = allProblems.filter((p) => p.isAttempted).length
-  const accuracy = attemptedCount > 0 ? Math.round((solvedCount / attemptedCount) * 100) : 80
-
-  const topicsList = ['All', 'Programming Fundamentals', 'Arrays', 'Strings', 'Searching', 'Sorting', 'Linked Lists', 'Stacks', 'Recursion', 'Trees', 'Two Pointers', 'Dynamic Programming']
+  const accuracy = progress?.assignmentStats?.attempts
+    ? Math.round((progress.assignmentStats.passes / progress.assignmentStats.attempts) * 100)
+    : null
+  const streak = getLearningStreak(progress)
+  const topicsList = ['All', ...new Set(allProblems.map((problem) => problem.topicName))]
+  const difficultyGroups = [
+    { id: 'easy', label: 'Easy' },
+    { id: 'intermediate', label: 'Intermediate' },
+    { id: 'difficult', label: 'Difficult' },
+  ].map((group) => ({
+    ...group,
+    count: allProblems.filter((problem) => problem.difficulty === group.id).length,
+  }))
 
   return (
     <div className="practice-dashboard-container page-enter" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -105,22 +117,22 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
         <div className="panel" style={{ padding: '16px', background: '#121214', border: '1px solid #27272a', borderRadius: '10px' }}>
           <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Accuracy Rate</span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '6px' }}>
-            <strong style={{ fontSize: '26px', color: '#38bdf8' }}>{accuracy}%</strong>
+            <strong style={{ fontSize: '26px', color: '#38bdf8' }}>{accuracy === null ? '—' : `${accuracy}%`}</strong>
             <span style={{ fontSize: '13px', color: '#71717a' }}>pass rate</span>
           </div>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#a1a1aa' }}>
-            Evaluated by OpenJDK 17 engine
+            {progress?.assignmentStats?.attempts || 0} evaluation attempts
           </p>
         </div>
 
         <div className="panel" style={{ padding: '16px', background: '#121214', border: '1px solid #27272a', borderRadius: '10px' }}>
           <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Learning Streak</span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '6px' }}>
-            <strong style={{ fontSize: '26px', color: '#f59e0b' }}>5 Days</strong>
-            <span style={{ fontSize: '13px', color: '#71717a' }}>🔥 active</span>
+            <strong style={{ fontSize: '26px', color: '#f59e0b' }}>{streak} {streak === 1 ? 'Day' : 'Days'}</strong>
+            <span style={{ fontSize: '13px', color: '#71717a' }}>{streak ? '🔥 active' : 'not active'}</span>
           </div>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#a1a1aa' }}>
-            Keep solving daily to maintain rank
+            {streak ? 'Keep learning daily to maintain your streak' : 'Record learning activity to start a streak'}
           </p>
         </div>
       </section>
@@ -145,10 +157,10 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
             ⚡ Recommended Next Problem
           </span>
           <h3 style={{ margin: '4px 0 2px', fontSize: '17px', color: '#fff' }}>
-            {allProblems.find((p) => !p.isSolved)?.title || 'Sum of Array Elements'}
+            {allProblems.find((p) => !p.isSolved)?.title || 'You have solved every available problem'}
           </h3>
           <p style={{ margin: 0, fontSize: '13px', color: '#a1a1aa' }}>
-            {allProblems.find((p) => !p.isSolved)?.description.slice(0, 110) || 'Write a Java method to sum elements.'}...
+            {(allProblems.find((p) => !p.isSolved)?.description || 'Choose a difficulty or topic to review your attempts.').slice(0, 110)}
           </p>
         </div>
 
@@ -156,7 +168,11 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
           <button
             type="button"
             className="primary-button"
-            onClick={() => setSelectedProblemId(allProblems.find((p) => !p.isSolved)?.id || allProblems[0]?.id)}
+            onClick={() => {
+              const nextProblem = allProblems.find((problem) => !problem.isSolved)
+              if (nextProblem) setSelectedProblemId(nextProblem.id)
+            }}
+            disabled={!allProblems.some((problem) => !problem.isSolved)}
             style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600 }}
           >
             Solve Problem <ArrowRight size={15} />
@@ -194,9 +210,9 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
             style={{ background: '#121214', color: '#fff', border: '1px solid #27272a', borderRadius: '8px', padding: '9px 12px', fontSize: '13px' }}
           >
             <option value="All">All Difficulties</option>
-            <option value="beginner">Beginner / Easy</option>
-            <option value="intermediate">Intermediate / Medium</option>
-            <option value="advanced">Advanced / Hard</option>
+            <option value="easy">Easy</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="difficult">Difficult</option>
           </select>
 
           {/* Status Filter */}
@@ -248,6 +264,19 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
             </button>
           ))}
         </div>
+        <nav className="practice-difficulty-groups" aria-label="Practice difficulty categories">
+          {difficultyGroups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              aria-pressed={selectedDifficultyFilter === group.id}
+              onClick={() => setSelectedDifficultyFilter((current) => current === group.id ? 'All' : group.id)}
+            >
+              <span>{group.label}</span>
+              <strong>{group.count}</strong>
+            </button>
+          ))}
+        </nav>
       </section>
 
       {/* Problems List Grid */}
@@ -303,20 +332,20 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
                       borderRadius: '4px',
                       fontWeight: 600,
                       background:
-                        prob.difficulty === 'beginner' || prob.difficulty === 'easy'
+                        prob.difficulty === 'easy'
                           ? 'rgba(134, 239, 172, 0.12)'
-                          : prob.difficulty === 'intermediate' || prob.difficulty === 'medium'
+                          : prob.difficulty === 'intermediate'
                             ? 'rgba(251, 191, 36, 0.12)'
                             : 'rgba(244, 63, 94, 0.12)',
                       color:
-                        prob.difficulty === 'beginner' || prob.difficulty === 'easy'
+                        prob.difficulty === 'easy'
                           ? '#86efac'
-                          : prob.difficulty === 'intermediate' || prob.difficulty === 'medium'
+                          : prob.difficulty === 'intermediate'
                             ? '#fbbf24'
                             : '#f43f5e',
                     }}
                   >
-                    {prob.difficulty}
+                    {difficultyLabel(prob.difficulty)}
                   </span>
                 </div>
 
@@ -352,9 +381,17 @@ export default function PracticeWorkspace({ curriculum, progress, onProgressUpda
   )
 }
 
-function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate }) {
+function ProblemDetailWorkspace({ problem, onBack, onProgressUpdate }) {
   const [activeLeftTab, setActiveLeftTab] = useState('description') // description, visualizer, hints
-  const [sourceCode, setSourceCode] = useState(problem.starterCode || '')
+  const [sourceCode, setSourceCode] = useState('')
+  const [starterCode, setStarterCode] = useState('')
+  const [starterLoading, setStarterLoading] = useState(true)
+  const [evaluationAvailable, setEvaluationAvailable] = useState(false)
+  const [evaluationMessage, setEvaluationMessage] = useState('')
+  const [revealedHintCount, setRevealedHintCount] = useState(0)
+  const [solutionConfirmationOpen, setSolutionConfirmationOpen] = useState(false)
+  const [solutionSource, setSolutionSource] = useState('')
+  const [solutionLoading, setSolutionLoading] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -365,14 +402,27 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
   const [activeTestCaseIdx, setActiveTestCaseIdx] = useState(0)
   const [copied, setCopied] = useState(false)
 
-  // Load starter if needed
   useEffect(() => {
-    if (!problem.starterCode) {
-      fetchSubmissionStarter(problem.id)
-        .then((data) => {
-          if (data.starterCode) setSourceCode(data.starterCode)
-        })
-        .catch(() => {})
+    let active = true
+
+    fetchSubmissionStarter(problem.id)
+      .then((data) => {
+        if (!active) return
+        const nextStarter = data.starterCode || ''
+        setStarterCode(nextStarter)
+        setSourceCode(nextStarter)
+        setEvaluationAvailable(data.evaluationAvailable === true)
+        setEvaluationMessage(data.evaluationMessage || '')
+      })
+      .catch((error) => {
+        if (active) setErrorNotice(error.message || 'Could not load a starter for this problem.')
+      })
+      .finally(() => {
+        if (active) setStarterLoading(false)
+      })
+
+    return () => {
+      active = false
     }
   }, [problem.id])
 
@@ -399,6 +449,7 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
     try {
       const res = await submitJavaAssignment(problem.id, sourceCode)
       setEvaluationResult(res)
+      saveLearningProgress(recordAssignmentAttempt(loadLearningProgress(), problem.id, res))
 
       // Update progress and learner profile
       recordUserActivity({
@@ -424,10 +475,24 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
   }
 
   const resetCode = () => {
-    setSourceCode(problem.starterCode || '')
+    setSourceCode(starterCode)
     setRunResult(null)
     setEvaluationResult(null)
     setErrorNotice('')
+  }
+
+  const revealSolution = async () => {
+    setSolutionLoading(true)
+    setErrorNotice('')
+    try {
+      const result = await fetchSubmissionSolution(problem.id)
+      setSolutionSource(result.sourceCode)
+      setSolutionConfirmationOpen(false)
+    } catch (error) {
+      setErrorNotice(error.message || 'Could not load the requested solution.')
+    } finally {
+      setSolutionLoading(false)
+    }
   }
 
   return (
@@ -461,18 +526,23 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
                     : '#fbbf24',
               }}
             >
-              {problem.difficulty}
+              {difficultyLabel(problem.difficulty)}
             </span>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Language: </span>
-          <span style={{ fontSize: '12px', background: '#1f1f23', padding: '3px 8px', borderRadius: '4px', color: '#fbbf24', fontWeight: 600 }}>
-            Java 17 (OpenJDK)
-          </span>
+          <label htmlFor="practice-language" style={{ fontSize: '12px', color: '#a1a1aa' }}>Language</label>
+          <select id="practice-language" aria-describedby="practice-language-help" defaultValue="java" style={{ background: '#1f1f23', padding: '5px 8px', border: '1px solid #3f3f46', borderRadius: '4px', color: '#fbbf24', fontWeight: 600 }}>
+            <option value="java">Java 17 (available)</option>
+            <option value="python" disabled>Python (execution unavailable)</option>
+            <option value="c" disabled>C (execution unavailable)</option>
+            <option value="cpp" disabled>C++ (execution unavailable)</option>
+            <option value="javascript" disabled>JavaScript (execution unavailable)</option>
+          </select>
         </div>
       </div>
+      <p id="practice-language-help" className="practice-language-help">Only Java is enabled because the current evaluator supports Java submissions. Other languages are disabled, not simulated.</p>
 
       {/* Split Workspace Layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 1fr) minmax(360px, 1.15fr)', gap: '16px', alignItems: 'start' }}>
@@ -605,12 +675,20 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
                   </p>
                 </div>
 
-                {problem.hints && problem.hints.map((hint, idx) => (
+                {problem.hints?.slice(0, revealedHintCount).map((hint, idx) => (
                   <div key={idx} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 14px' }}>
                     <span style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 600 }}>Hint {idx + 1}:</span>
                     <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#e4e4e7' }}>{hint}</p>
                   </div>
                 ))}
+                <button
+                  type="button"
+                  className="quiet-button"
+                  disabled={revealedHintCount >= (problem.hints?.length || 0)}
+                  onClick={() => setRevealedHintCount((count) => Math.min(count + 1, problem.hints?.length || 0))}
+                >
+                  {revealedHintCount >= (problem.hints?.length || 0) ? 'No more hints' : `Reveal hint ${revealedHintCount + 1}`}
+                </button>
 
                 <Link
                   to="/tutor"
@@ -625,8 +703,40 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
           </div>
         </div>
 
+        <section className="practice-solution-panel" aria-label="Reference solution">
+          {!solutionSource ? (
+            <>
+              <p>Reference code stays hidden until you request it. Try the problem and hints first.</p>
+              <button type="button" className="quiet-button" disabled={!evaluationAvailable} onClick={() => setSolutionConfirmationOpen(true)}>
+                View Solution
+              </button>
+            </>
+          ) : (
+            <div>
+              <h4>Reference solution</h4>
+              <p>Use this after attempting the problem to compare the method and implementation.</p>
+              <pre><code>{solutionSource}</code></pre>
+            </div>
+          )}
+          {solutionConfirmationOpen && (
+            <div className="practice-solution-confirm" role="dialog" aria-modal="true" aria-labelledby="solution-confirm-title">
+              <strong id="solution-confirm-title">Reveal the full solution?</strong>
+              <p>This will show the reference code. Consider trying the problem or revealing hints first.</p>
+              <button type="button" className="primary-button" disabled={solutionLoading} onClick={revealSolution}>
+                {solutionLoading ? 'Loading solution...' : 'Reveal Solution'}
+              </button>
+              <button type="button" className="quiet-button" disabled={solutionLoading} onClick={() => setSolutionConfirmationOpen(false)}>Cancel</button>
+            </div>
+          )}
+        </section>
+
         {/* Right Panel: Java Code Editor & Evaluation Console */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {(starterLoading || evaluationMessage) && (
+            <p className="practice-evaluation-message" role="status">
+              {starterLoading ? 'Loading the assignment starter and evaluator status…' : evaluationMessage}
+            </p>
+          )}
           {/* Editor Header */}
           <div
             style={{
@@ -665,8 +775,10 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
 
           {/* Textarea Code Editor */}
           <textarea
+            aria-label="Java source code"
             value={sourceCode}
             onChange={(e) => setSourceCode(e.target.value)}
+            disabled={starterLoading || !evaluationAvailable}
             spellCheck="false"
             style={{
               width: '100%',
@@ -723,7 +835,7 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
               type="button"
               className="quiet-button"
               onClick={handleRun}
-              disabled={isRunning || isSubmitting || !sourceCode.trim()}
+              disabled={starterLoading || !evaluationAvailable || isRunning || isSubmitting || !sourceCode.trim()}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -741,7 +853,7 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
               type="button"
               className="primary-button"
               onClick={handleSubmit}
-              disabled={isRunning || isSubmitting || !sourceCode.trim()}
+              disabled={starterLoading || !evaluationAvailable || isRunning || isSubmitting || !sourceCode.trim()}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -886,10 +998,10 @@ function ProblemDetailWorkspace({ problem, onBack, progress, onProgressUpdate })
 }
 
 function collectAllProblems(curriculum, progress) {
-  const completedAssignmentIds = progress?.completedAssignmentIds || []
+  const completedAssignmentIds = progress?.completedAssignments || []
   const attemptedIds = (progress?.recentActivity || [])
-    .filter((a) => a.type?.startsWith('assignment-'))
-    .map((a) => a.id)
+    .filter((activity) => activity.type?.startsWith('assignment-'))
+    .map((activity) => activity.id)
 
   const defaultProblems = [
     {
@@ -904,7 +1016,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 'values = [1, 2, 3, 4, 5]', output: '15', explanation: 'Sum of first 5 positive integers.' },
       ],
       hints: ['Initialize a running total variable to 0.', 'Use an enhanced for loop to iterate over values.', 'Return the total after the loop finishes.'],
-      starterCode: `class Solution {\n    public int sum(int[] values) {\n        int total = 0;\n        for (int v : values) {\n            total += v;\n        }\n        return total;\n    }\n}`,
     },
     {
       id: 'arrays-assignment-1',
@@ -917,7 +1028,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 'values = [2, 7, 1, 9, 4]', output: '9', explanation: '9 is the highest value in the array.' },
       ],
       hints: ['Initialize max with values[0].', 'Compare every subsequent element with max.', 'Update max whenever a larger value is encountered.'],
-      starterCode: `class Solution {\n    public int findMax(int[] values) {\n        int max = values[0];\n        for (int i = 1; i < values.length; i++) {\n            if (values[i] > max) max = values[i];\n        }\n        return max;\n    }\n}`,
     },
     {
       id: 'two-sum',
@@ -930,7 +1040,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 'numbers = [2, 7, 11, 15], target = 9', output: '[1, 2]', explanation: 'numbers[0] + numbers[1] == 9. Return 1-based indices.' },
       ],
       hints: ['Use two pointers starting at the beginning and end.', 'If sum is too small, advance left pointer.', 'If sum is too large, retreat right pointer.'],
-      starterCode: `class Solution {\n    public int[] twoSum(int[] numbers, int target) {\n        int left = 0, right = numbers.length - 1;\n        while (left < right) {\n            int sum = numbers[left] + numbers[right];\n            if (sum == target) return new int[]{left + 1, right + 1};\n            else if (sum < target) left++;\n            else right--;\n        }\n        return new int[]{-1, -1};\n    }\n}`,
     },
     {
       id: 'searching-assignment-1',
@@ -943,7 +1052,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 'nums = [-1, 0, 3, 5, 9, 12], target = 9', output: '4', explanation: '9 exists in nums and its index is 4.' },
       ],
       hints: ['Set low = 0 and high = nums.length - 1.', 'Calculate mid = low + (high - low) / 2 to avoid overflow.', 'Compare nums[mid] to target and halve the search interval.'],
-      starterCode: `class Solution {\n    public int binarySearch(int[] values, int target) {\n        int low = 0, high = values.length - 1;\n        while (low <= high) {\n            int mid = low + (high - low) / 2;\n            if (values[mid] == target) return mid;\n            else if (values[mid] < target) low = mid + 1;\n            else high = mid - 1;\n        }\n        return -1;\n    }\n}`,
     },
     {
       id: 'strings-assignment-1',
@@ -957,7 +1065,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 's = "hello"', output: 'false', explanation: 'Not a palindrome.' },
       ],
       hints: ['Use Character.isLetterOrDigit() to skip punctuation.', 'Use Character.toLowerCase() for comparison.', 'Compare characters from opposite ends inward.'],
-      starterCode: `class Solution {\n    public boolean isPalindrome(String s) {\n        int left = 0, right = s.length() - 1;\n        while (left < right) {\n            while (left < right && !Character.isLetterOrDigit(s.charAt(left))) left++;\n            while (left < right && !Character.isLetterOrDigit(s.charAt(right))) right--;\n            if (Character.toLowerCase(s.charAt(left)) != Character.toLowerCase(s.charAt(right))) return false;\n            left++;\n            right--;\n        }\n        return true;\n    }\n}`,
     },
     {
       id: 'stacks-assignment-1',
@@ -972,7 +1079,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 's = "(]"', output: 'false', explanation: 'Mismatched brackets.' },
       ],
       hints: ['When seeing an opening bracket, push the corresponding closing bracket.', 'When seeing a closing bracket, check if stack top matches and pop.', 'At the end, stack must be empty.'],
-      starterCode: `import java.util.Stack;\n\nclass Solution {\n    public boolean isValid(String s) {\n        Stack<Character> stack = new Stack<>();\n        for (char c : s.toCharArray()) {\n            if (c == '(') stack.push(')');\n            else if (c == '{') stack.push('}');\n            else if (c == '[') stack.push(']');\n            else if (stack.isEmpty() || stack.pop() != c) return false;\n        }\n        return stack.isEmpty();\n    }\n}`,
     },
     {
       id: 'linked-lists-assignment-1',
@@ -985,7 +1091,6 @@ function collectAllProblems(curriculum, progress) {
         { input: 'head = [1, 2, 3, 4, 5]', output: '[5, 4, 3, 2, 1]', explanation: 'List redirected backward.' },
       ],
       hints: ['Keep three pointers: prev, curr, and next.', 'Save next node before rewiring curr.next to prev.', 'Advance prev to curr and curr to next.'],
-      starterCode: `class Solution {\n    public Harness.ListNode reverseList(Harness.ListNode head) {\n        Harness.ListNode prev = null;\n        Harness.ListNode curr = head;\n        while (curr != null) {\n            Harness.ListNode nextNode = curr.next;\n            curr.next = prev;\n            prev = curr;\n            curr = nextNode;\n        }\n        return prev;\n    }\n}`,
     },
     {
       id: 'climbing-stairs',
@@ -999,13 +1104,51 @@ function collectAllProblems(curriculum, progress) {
         { input: 'n = 3', output: '3', explanation: '1+1+1, 1+2, or 2+1.' },
       ],
       hints: ['To reach step n, you must come from step n-1 or n-2.', 'ways(n) = ways(n-1) + ways(n-2).', 'This matches Fibonacci sequence.'],
-      starterCode: `class Solution {\n    public int climbStairs(int n) {\n        if (n <= 2) return n;\n        int prev2 = 1, prev1 = 2;\n        for (int i = 3; i <= n; i++) {\n            int curr = prev1 + prev2;\n            prev2 = prev1;\n            prev1 = curr;\n        }\n        return prev1;\n    }\n}`,
+    },
+    {
+      id: 'coin-change',
+      title: 'Minimum Coins for an Amount',
+      topicName: 'Dynamic Programming',
+      difficulty: 'intermediate',
+      description: 'Given coin denominations and an amount, return the fewest coins needed to make that amount, or -1 if it cannot be made.',
+      constraints: ['1 <= coins.length <= 12', '1 <= coins[i] <= 2^31 - 1', '0 <= amount <= 10^4'],
+      examples: [
+        { input: 'coins = [1, 2, 5], amount = 11', output: '3', explanation: '11 = 5 + 5 + 1 uses three coins.' },
+        { input: 'coins = [2], amount = 3', output: '-1', explanation: 'No combination of 2-value coins makes 3.' },
+      ],
+      hints: ['For each amount, compare using each coin with leaving it unused.', 'Build the best answer for smaller amounts first.', 'The state is the fewest coins needed to form each subtotal.'],
+      tags: ['Dynamic Programming', 'Unbounded Knapsack'],
     },
   ]
 
-  return defaultProblems.map((p) => ({
-    ...p,
-    isSolved: completedAssignmentIds.includes(p.id) || p.id === 'pf-assignment-1',
-    isAttempted: attemptedIds.includes(p.id) || p.id === 'pf-assignment-1',
+  const problemsById = new Map(defaultProblems.map((problem) => [problem.id, problem]))
+  for (const topic of curriculum) {
+    for (const assignment of topic.assignments || []) {
+      problemsById.set(assignment.id, {
+        ...problemsById.get(assignment.id),
+        ...assignment,
+        id: assignment.id,
+        topicName: topic.name,
+        difficulty: normalizeDifficulty(assignment.difficulty),
+        tags: [topic.name, topic.category].filter(Boolean),
+      })
+    }
+  }
+
+  return [...problemsById.values()].map((problem) => ({
+    ...problem,
+    difficulty: normalizeDifficulty(problem.difficulty),
+    isSolved: completedAssignmentIds.includes(problem.id),
+    isAttempted: attemptedIds.includes(problem.id),
   }))
+}
+
+function normalizeDifficulty(difficulty) {
+  if (['beginner', 'easy'].includes(String(difficulty).toLowerCase())) return 'easy'
+  if (['intermediate', 'medium'].includes(String(difficulty).toLowerCase())) return 'intermediate'
+  return 'difficult'
+}
+
+function difficultyLabel(difficulty) {
+  return { easy: 'Easy', intermediate: 'Intermediate', difficult: 'Difficult' }[difficulty] || 'Difficult'
 }
