@@ -2,6 +2,7 @@
   "name": "ai-tutor-local-dev",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "workspaces": [
     "frontend ai",
     "backend ai"
@@ -11,15 +12,14 @@
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "concurrently --kill-others --names frontend,backend \"npm run dev --workspace=dsa-ai -- --host 0.0.0.0\" \"npm run dev --workspace=mentor-ai-backend\"",
+    "build:frontend": "npm run build --workspace=dsa-ai",
+    "build": "npm run build --workspace=dsa-ai",
+    "lint": "npm run lint --workspace=dsa-ai",
+    "dev": "npm run build && node server.js",
+    "start": "node server.js",
     "dev:frontend": "npm run dev --workspace=dsa-ai -- --host 0.0.0.0",
     "dev:backend": "npm run dev --workspace=mentor-ai-backend",
     "worker": "npm run worker --workspace=mentor-ai-backend",
-    "build": "npm run build --workspace=dsa-ai",
-    "start": "npm run build && npm run start --workspace=mentor-ai-backend",
     "test": "npm test --workspace=dsa-ai && npm test --workspace=mentor-ai-backend"
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
   }
 }

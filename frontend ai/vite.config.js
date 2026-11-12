@@ -11,7 +11,7 @@ export default defineConfig({
     open: '/tutor',
     proxy: {
       '/api': {
-        target: process.env.BACKEND_URL || 'http://127.0.0.1:3001',
+        target: process.env.BACKEND_URL || 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

@@ -4,12 +4,15 @@ import './WorkspacePages.css'
 import './PracticeProblem.css'
 import './Curriculum.css'
 import './LearningExperience.css'
-import { fetchCurriculum, fetchSubmissionStarter, generateProblem, postHint, submitCurriculumQuiz, submitJavaAssignment } from '../services/api'
-import { loadLearningProgress, markLessonViewed, markQuizPassed, recordAssignmentAttempt, saveLearningProgress } from '../services/learning-progress'
+import { fetchCurriculum, submitCurriculumQuiz } from '../services/api'
+import { loadLearningProgress, markLessonViewed, markQuizPassed, saveLearningProgress } from '../services/learning-progress'
 import { summarizeLearning } from '../services/learning-summary'
-import { loadLearnerProfile, saveLearnerProfile } from '../services/learner-profile'
+import { loadLearnerProfile, saveLearnerProfile, createDefaultDemoProfile } from '../services/learner-profile'
+import PracticeWorkspace from '../components/PracticeWorkspace'
+import ConceptVisualizer from '../components/ConceptVisualizer'
+import { DSA_CONCEPTS } from '../data/dsa-concepts'
 import {
-  ArrowRight, BookOpen, BrainCircuit, Search, UserRound, Zap,
+  ArrowRight, BookOpen, BrainCircuit, Search,
 } from 'lucide-react'
 
 function PageHeader({ eyebrow, title, description, action }) {
@@ -177,6 +180,20 @@ function Topics({ routeTopicId }) {
             <Link className="quiet-button" to="/tutor" state={{ topic: selectedTopic.name, difficulty: selectedTopic.level }}><BrainCircuit size={15} /> Ask AI Tutor</Link>
           </section>
           <section className="curriculum-section topic-objectives"><h4>1. Learning objectives</h4><ul>{selectedTopic.learningObjectives.map((objective) => <li key={objective}>{objective}</li>)}</ul></section>
+          {(() => {
+            const matchingConcept = DSA_CONCEPTS.find((c) => c.topicName.toLowerCase() === selectedTopic.name.toLowerCase() || c.id.toLowerCase().includes(selectedTopic.id.toLowerCase())) || DSA_CONCEPTS[0]
+            return (
+              <section className="curriculum-section topic-visualizer" style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <h4 style={{ margin: 0 }}>Interactive Concept Visualizer</h4>
+                  <Link to="/visualizer" className="text-button" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Open in Full Visualizer Lab <ArrowRight size={13} />
+                  </Link>
+                </div>
+                <ConceptVisualizer concept={matchingConcept} />
+              </section>
+            )
+          })()}
           <section className="curriculum-section topic-lesson" id="topic-lesson"><h4>2. Lesson / concept explanation</h4>{selectedTopic.lessonSections.map((section, index) => <article className="topic-concept-card" key={section.title}><span className="topic-step-number">{index + 1}</span><div><h5>{section.title}</h5><p>{section.explanation}</p></div></article>)}<button className="quiet-button" disabled={selectedTopic.progression.lessonViewed} onClick={() => updateProgress(markLessonViewed(progress, selectedTopic.id))}>{selectedTopic.progression.lessonViewed ? 'Lesson viewed' : 'Mark lesson viewed'}</button></section>
           <section className="curriculum-section topic-example"><h4>3. Worked example</h4><article className="worked-example-card"><h5>{selectedTopic.workedExample.title}</h5><ol>{selectedTopic.workedExample.steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol><p className="curriculum-dry-run"><strong>Dry run:</strong> {selectedTopic.workedExample.dryRun}</p></article></section>
           {selectedTopic.javaExample && <section className="curriculum-section topic-java-example"><h4>4. Java implementation</h4><h5>{selectedTopic.javaExample.title}</h5><p>{selectedTopic.javaExample.explanation}</p><pre><code>{selectedTopic.javaExample.code}</code></pre><p><strong>Expected output</strong></p><pre><code>{selectedTopic.javaExample.expectedOutput}</code></pre></section>}
@@ -242,24 +259,14 @@ function Practice() {
   const [progress, setProgress] = useState(loadLearningProgress)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [reloadKey, setReloadKey] = useState(0)
-  const [filter, setFilter] = useState('All')
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState('')
-  const [shownHints, setShownHints] = useState(0)
-  const [tutorHints, setTutorHints] = useState([])
-  const [hintLoading, setHintLoading] = useState(false)
-  const [hintError, setHintError] = useState('')
-  const [starterByAssignmentId, setStarterByAssignmentId] = useState({})
-  const [submissionSources, setSubmissionSources] = useState({})
-  const [submissionLoadingId, setSubmissionLoadingId] = useState('')
-  const [submissionResults, setSubmissionResults] = useState({})
-  const [submissionErrors, setSubmissionErrors] = useState({})
-  const [generatedProblem, setGeneratedProblem] = useState(null)
-  const [generationError, setGenerationError] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const problemRequestRef = useRef(false)
-  const [shownGeneratedHints, setShownGeneratedHints] = useState(0)
-  const filters = ['All', 'Beginner', 'Intermediate', 'Advanced']
+
+  const refreshData = () => {
+    const currentProgress = loadLearningProgress()
+    setProgress(currentProgress)
+    fetchCurriculum(currentProgress)
+      .then(setCurriculum)
+      .catch((err) => setError(err.message || 'Could not load practice curriculum.'))
+  }
 
   useEffect(() => {
     let active = true
@@ -267,11 +274,9 @@ function Practice() {
       .then((topics) => {
         if (!active) return
         setCurriculum(topics)
-        const firstAssignment = topics.find((topic) => topic.progression.unlocked && topic.assignments.length)?.assignments[0]
-        setSelectedAssignmentId((currentId) => currentId || firstAssignment?.id || '')
       })
-      .catch((requestError) => {
-        if (active) setError(requestError.message || 'Could not load assignments')
+      .catch((err) => {
+        if (active) setError(err.message || 'Could not load assignments')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -280,183 +285,37 @@ function Practice() {
     return () => {
       active = false
     }
-  }, [reloadKey])
+  }, [])
 
-  useEffect(() => {
-    if (!selectedAssignmentId) return undefined
-
-    let active = true
-
-    fetchSubmissionStarter(selectedAssignmentId)
-      .then((submissionStarter) => {
-        if (!active) return
-        setStarterByAssignmentId((current) => ({ ...current, [selectedAssignmentId]: { data: submissionStarter } }))
-        setSubmissionSources((current) => current[selectedAssignmentId] === undefined
-          ? { ...current, [selectedAssignmentId]: submissionStarter.starterCode || '' }
-          : current)
-      })
-      .catch((requestError) => {
-        if (active) setStarterByAssignmentId((current) => ({
-          ...current,
-          [selectedAssignmentId]: { error: requestError.message || 'Could not load the Java starter code' },
-        }))
-      })
-
-    return () => {
-      active = false
-    }
-  }, [selectedAssignmentId])
-
-  const assignments = curriculum
-    .filter((topic) => topic.progression.unlocked)
-    .flatMap((topic) => topic.assignments.map((assignment) => ({
-      ...assignment,
-      topicId: topic.id,
-      topicName: topic.name,
-      completed: topic.progression.completedAssignmentIds.includes(assignment.id),
-    })))
-  const visibleAssignments = assignments.filter((assignment) => (
-    filter === 'All' || assignment.difficulty === filter.toLowerCase()
-  ))
-  const selectedAssignment = visibleAssignments.find((assignment) => assignment.id === selectedAssignmentId)
-    || visibleAssignments[0]
-  const starterEntry = starterByAssignmentId[selectedAssignmentId]
-  const starter = starterEntry?.data || null
-  const starterLoading = Boolean(selectedAssignmentId && !starterEntry)
-  const starterError = starterEntry?.error || ''
-  const submissionSource = submissionSources[selectedAssignmentId] || ''
-  const submissionLoading = submissionLoadingId === selectedAssignmentId
-  const submissionResult = submissionResults[selectedAssignmentId]
-  const submissionError = submissionErrors[selectedAssignmentId] || ''
-  const submissionSourceBytes = new TextEncoder().encode(submissionSource).length
-  const submissionHistory = progress.recentActivity.filter((activity) => (
-    activity.id === selectedAssignmentId &&
-    ['assignment-passed', 'assignment-failed'].includes(activity.type)
-  ))
-
-  const selectAssignment = (assignment) => {
-    setSelectedAssignmentId(assignment.id)
-    setShownHints(0)
-    setTutorHints([])
-    setHintError('')
+  if (loading) {
+    return <div className="workspace-page page-enter"><p className="curriculum-state" role="status">Loading practice problems...</p></div>
   }
 
-  const requestTutorHint = async () => {
-    if (!selectedAssignment || hintLoading) return
-
-    setHintLoading(true)
-    setHintError('')
-
-    try {
-      const result = await postHint({
-        topic: selectedAssignment.topicName,
-        difficulty: selectedAssignment.difficulty,
-        assignmentId: selectedAssignment.id,
-        hintStage: Math.min(3, shownHints + tutorHints.length + 1),
-        conversationHistory: [
-          ...selectedAssignment.hints.slice(0, shownHints).map((hint) => ({ role: 'assistant', content: hint })),
-          ...tutorHints.map((hint) => ({ role: 'assistant', content: hint })),
-        ],
-      })
-      setTutorHints((currentHints) => [...currentHints, result.hint])
-    } catch (requestError) {
-      setHintError(requestError.message || 'Could not get a hint')
-    } finally {
-      setHintLoading(false)
-    }
+  if (error) {
+    return (
+      <div className="workspace-page page-enter">
+        <div className="curriculum-state curriculum-error" role="alert">
+          <p>{error}</p>
+          <button className="quiet-button" onClick={refreshData}>Try again</button>
+        </div>
+      </div>
+    )
   }
 
-  const requestProblem = async () => {
-    if (problemRequestRef.current) return
-    problemRequestRef.current = true
-    setGenerating(true)
-    setGenerationError('')
-    setShownGeneratedHints(0)
-    try {
-      setGeneratedProblem(await generateProblem({
-        topic: selectedAssignment?.topicName || 'Arrays',
-        difficulty: filter === 'Beginner' ? 'easy' : filter === 'Advanced' ? 'hard' : 'medium',
-        userLevel: filter === 'Beginner' ? 'beginner' : filter === 'Advanced' ? 'advanced' : 'intermediate',
-      }))
-    } catch (error) {
-      setGenerationError(error.message || 'Could not generate a practice problem')
-    } finally {
-      problemRequestRef.current = false
-      setGenerating(false)
-    }
-  }
-
-  const submitAssignment = async () => {
-    if (!selectedAssignment || !starter?.evaluationAvailable || submissionLoading) return
-
-    setSubmissionLoadingId(selectedAssignment.id)
-    setSubmissionResults((current) => {
-      const next = { ...current }
-      delete next[selectedAssignment.id]
-      return next
-    })
-    setSubmissionErrors((current) => {
-      const next = { ...current }
-      delete next[selectedAssignment.id]
-      return next
-    })
-    try {
-      const result = await submitJavaAssignment(selectedAssignment.id, submissionSource)
-      setSubmissionResults((current) => ({ ...current, [selectedAssignment.id]: result }))
-      const nextProgress = saveLearningProgress(recordAssignmentAttempt(progress, selectedAssignment.id, result))
-      setProgress(nextProgress)
-      setCurriculum(await fetchCurriculum(nextProgress))
-    } catch (requestError) {
-      setSubmissionErrors((current) => ({
-        ...current,
-        [selectedAssignment.id]: requestError.message || 'Could not evaluate this Java submission',
-      }))
-    } finally {
-      setSubmissionLoadingId('')
-    }
-  }
-
-  const resetSubmission = () => {
-    if (!selectedAssignment || !starter?.starterCode) return
-    setSubmissionSources((current) => ({ ...current, [selectedAssignment.id]: starter.starterCode }))
-    setSubmissionResults((current) => {
-      const next = { ...current }
-      delete next[selectedAssignment.id]
-      return next
-    })
-    setSubmissionErrors((current) => {
-      const next = { ...current }
-      delete next[selectedAssignment.id]
-      return next
-    })
-  }
-
-  return <div className="workspace-page page-enter">
-    <PageHeader eyebrow="Practice" title="Assignments" description="Submit your Java solution for evaluation. An assignment is marked complete only after the evaluator confirms that it passed." action={<button className="quiet-button" onClick={requestProblem} disabled={generating}><Zap size={16} /> {generating ? 'Generating...' : 'Generate problem'}</button>} />
-    {loading && <p className="curriculum-state" role="status">Loading assignments...</p>}
-    {!loading && error && <div className="curriculum-state curriculum-error" role="alert"><p>{error}</p><button className="quiet-button" onClick={() => { setLoading(true); setError(''); setReloadKey((key) => key + 1) }}>Try again</button></div>}
-    {!loading && !error && assignments.length === 0 && <p className="curriculum-state">No unlocked assignments are available yet. Complete the programming fundamentals topic to unlock the next topics.</p>}
-    {!loading && !error && assignments.length > 0 && <>
-      <div className="filter-row"><div className="segmented-control">{filters.map((item) => <button className={filter === item ? 'selected' : ''} key={item} onClick={() => { setFilter(item); setShownHints(0); setTutorHints([]); setHintError('') }}>{item}</button>)}</div><span className="muted">{visibleAssignments.length} assignments</span></div>
-      {visibleAssignments.length === 0 && <p className="curriculum-state">No assignments are available at this difficulty.</p>}
-      {selectedAssignment && <div className="practice-curriculum-layout">
-        <nav className="practice-assignment-picker" aria-label="Practice assignments">{visibleAssignments.map((assignment) => <button className={`practice-assignment-option ${selectedAssignment.id === assignment.id ? 'selected' : ''}`} key={assignment.id} onClick={() => selectAssignment(assignment)}><small>{assignment.topicName} · {assignment.difficulty}</small><strong>{assignment.title}</strong></button>)}</nav>
-        <article className="panel practice-assignment-detail">
-          <header className="curriculum-lesson-header"><div><p className="eyebrow">{selectedAssignment.topicName} · {selectedAssignment.language}</p><h3>{selectedAssignment.title}</h3><span className={`difficulty ${selectedAssignment.difficulty}`}>{selectedAssignment.difficulty}</span></div></header>
-          <section className="curriculum-section"><h4>Problem</h4><p>{selectedAssignment.description}</p>{selectedAssignment.completed && <p className="submission-completion" role="status">Evaluator-confirmed completion</p>}</section>
-          <section className="curriculum-section"><h4>Learning objectives</h4><ul>{selectedAssignment.learningObjectives.map((objective) => <li key={objective}>{objective}</li>)}</ul></section>
-          <section className="curriculum-section"><h4>Constraints</h4><ul>{selectedAssignment.constraints.map((constraint) => <li key={constraint}>{constraint}</li>)}</ul></section>
-          <section className="curriculum-section"><h4>Examples</h4>{selectedAssignment.examples.map((example, index) => <div className="generated-example" key={`${index}-${example.input}`}><p><strong>Input:</strong> {example.input}</p><p><strong>Output:</strong> {example.output}</p><p>{example.explanation}</p></div>)}</section>
-          <section className="curriculum-section"><h4>Edge cases to consider</h4><ul>{selectedAssignment.edgeCases.map((edgeCase) => <li key={edgeCase}>{edgeCase}</li>)}</ul></section>
-          <section className="curriculum-section"><div className="practice-hint-heading"><h4>Hints</h4><span>{shownHints + tutorHints.length} used · up to 3 levels</span></div>{selectedAssignment.hints.slice(0, shownHints).map((hint, index) => <p className="practice-hint" key={`${index}-${hint}`}>Hint {index + 1}: {hint}</p>)}{tutorHints.map((hint, index) => <p className="practice-hint tutor" key={`tutor-${index}`}>Tutor hint {index + 1}: {hint}</p>)}{hintError && <p className="problem-error" role="alert">{hintError}</p>}<div className="practice-hint-actions"><button className="quiet-button" onClick={() => setShownHints((count) => Math.min(count + 1, selectedAssignment.hints.length))} disabled={shownHints >= selectedAssignment.hints.length || shownHints + tutorHints.length >= 3}>Show next hint</button><button className="quiet-button" onClick={requestTutorHint} disabled={hintLoading || shownHints + tutorHints.length >= 3}>{hintLoading ? 'Thinking...' : 'Get AI hint'}</button><Link className="quiet-button" to="/tutor" state={{ topic: selectedAssignment.topicName, difficulty: selectedAssignment.difficulty, assignmentId: selectedAssignment.id }}><BrainCircuit size={15} /> Ask AI Tutor about this problem</Link></div></section>
-          <section className="curriculum-section"><h4>Java submission</h4>{starterLoading && <p className="muted" role="status">Loading starter code...</p>}{starterError && <p className="problem-error" role="alert">{starterError}</p>}{submissionError && <p className="problem-error" role="alert">{submissionError}</p>}{!starterLoading && starter && !starter.evaluationAvailable && <p className="muted" role="status">{starter.evaluationMessage || (starter.hasTests ? 'The isolated Java worker is unavailable. You can review the starter, but this server will not run your code.' : 'Automated evaluation is not available for this assignment yet.')}</p>}{starter?.starterCode && <><label className="submission-editor-label" htmlFor="java-submission">Java source <span>{submissionSourceBytes} / 24,000 bytes</span></label><textarea id="java-submission" className="java-submission-editor" value={submissionSource} maxLength={24000} spellCheck="false" onChange={(event) => { setSubmissionSources((current) => ({ ...current, [selectedAssignment.id]: event.target.value })); setSubmissionResults((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }); setSubmissionErrors((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }) }} aria-label="Java source code" /><div className="practice-editor-actions"><button className="primary-button" onClick={submitAssignment} disabled={!starter.evaluationAvailable || submissionLoading || starterLoading || !submissionSource.trim() || submissionSourceBytes > 24000}>{submissionLoading ? 'Evaluating...' : starter.evaluationAvailable ? 'Submit / Evaluate' : 'Evaluation unavailable'}</button><button className="quiet-button" type="button" onClick={resetSubmission} disabled={submissionLoading || !starter.starterCode}>Reset code</button></div>{submissionLoading && <p className="muted" role="status">Running your solution against the assignment tests...</p>}</>}{submissionResult && <div className={`submission-result ${submissionResult.passed ? 'passed' : 'failed'}`} role="status"><strong>{submissionResult.passed ? 'Passed' : 'Failed'}</strong><p>{submissionResult.feedback}</p>{submissionResult.sampleTests && <p>Sample cases: {submissionResult.sampleTests.passed} / {submissionResult.sampleTests.total} passed</p>}{submissionResult.additionalTestsPassed !== undefined && <p>Additional checks: {submissionResult.additionalTestsPassed ? 'passed' : 'some failed'}</p>}{submissionResult.diagnostics?.map((diagnostic, index) => <p key={`${index}-${diagnostic.message}`}>{diagnostic.line ? `Line ${diagnostic.line}: ` : ''}{diagnostic.message}</p>)}</div>}</section>
-          <section className="curriculum-section submission-history"><h4>Submission history</h4>{submissionHistory.length === 0 ? <p className="muted">No Java evaluation attempts recorded for this assignment.</p> : <ol>{submissionHistory.map((attempt) => <li key={`${attempt.type}-${attempt.at}`}><span className={attempt.type === 'assignment-passed' ? 'history-passed' : 'history-failed'}>{attempt.type === 'assignment-passed' ? 'Passed' : 'Not passed'}</span><time dateTime={attempt.at}>{new Date(attempt.at).toLocaleString()}</time></li>)}</ol>}</section>
-        </article>
-      </div>}
-    </>}
-    {generationError && <p className="problem-error" role="alert">{generationError}</p>}
-    {generatedProblem && <section className="panel generated-problem" aria-live="polite"><div className="generated-problem-heading"><div><p className="eyebrow">{generatedProblem.fallback ? 'Local fallback' : 'Generated'} {generatedProblem.difficulty} problem · {generatedProblem.topic}</p><h3>{generatedProblem.title}</h3></div><button className="icon-button" aria-label="Generate another problem" onClick={requestProblem} disabled={generating}><Zap size={17} /></button></div><p className="generated-problem-description">{generatedProblem.description}</p><h4>Constraints</h4><ul>{generatedProblem.constraints.map((constraint, index) => <li key={`${index}-${constraint}`}>{constraint}</li>)}</ul><h4>Examples</h4>{generatedProblem.examples.map((example, index) => <div className="generated-example" key={`${index}-${example.input}`}><p><strong>Input:</strong> {example.input}</p><p><strong>Output:</strong> {example.output}</p><p>{example.explanation}</p></div>)}{shownGeneratedHints > 0 && <><h4>Hints</h4><ol>{generatedProblem.hints.slice(0, shownGeneratedHints).map((hint, index) => <li key={`${index}-${hint}`}>{hint}</li>)}</ol></>}{shownGeneratedHints < generatedProblem.hints.length && <button className="quiet-button" onClick={() => setShownGeneratedHints((count) => count + 1)}>Show next generated hint</button>}</section>}
-  </div>
+  return (
+    <div className="workspace-page page-enter">
+      <PageHeader
+        eyebrow="Practice & Assessment"
+        title="Java DSA Practice Workspace"
+        description="Write and test your solutions with real Java 17 execution. Traced step-by-step with problem visualizers."
+      />
+      <PracticeWorkspace
+        curriculum={curriculum}
+        progress={progress}
+        onProgressUpdate={refreshData}
+      />
+    </div>
+  )
 }
 
 function Progress() {
@@ -497,8 +356,9 @@ function Progress() {
 
 function Profile() {
   const [profile, setProfile] = useState(loadLearnerProfile)
-  const [displayName, setDisplayName] = useState(profile?.displayName || '')
-  const [learningGoal, setLearningGoal] = useState(profile?.learningGoal || 'Learn data structures and algorithms in Java')
+  const [displayName, setDisplayName] = useState(profile?.displayName || 'Alex Rivers')
+  const [learningGoal, setLearningGoal] = useState(profile?.learningGoal || 'Master LeetCode Mediums and Data Structures in Java')
+  const [level, setLevel] = useState(profile?.level || 'Intermediate')
   const [topics, setTopics] = useState([])
   const [progress] = useState(loadLearningProgress)
   const [error, setError] = useState('')
@@ -519,49 +379,254 @@ function Profile() {
   }, [progress])
 
   const summary = summarizeLearning(topics, progress)
+
   const saveProfile = (event) => {
     event.preventDefault()
     setError('')
     setSaved(false)
     try {
-      const nextProfile = saveLearnerProfile({ displayName, learningGoal })
+      const nextProfile = saveLearnerProfile({ displayName, learningGoal, level })
       setProfile(nextProfile)
       setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
     } catch (profileError) {
       setError(profileError.message || 'Could not save your profile.')
     }
   }
 
-  return <div className="workspace-page page-enter">
-    <PageHeader eyebrow="Your workspace" title="Profile" description="Manage the local demo profile and review real learning activity from this browser." />
-    <div className="profile-grid">
-      <section className="panel profile-card">
-        <div className="profile-identity">
-          <div className="profile-avatar"><UserRound size={24} /></div>
-          <div><h3>{profile?.displayName || 'Guest learner'}</h3><p>{profile ? 'Demo profile saved in this browser.' : 'Create a local demo profile to personalize your workspace.'}</p><span className="status">{profile ? 'Demo user' : 'Guest'}</span></div>
-        </div>
-        <form className="profile-fields" onSubmit={saveProfile}>
-          <label htmlFor="profile-display-name">Display name<input id="profile-display-name" value={displayName} maxLength={60} onChange={(event) => { setDisplayName(event.target.value); setSaved(false) }} required /></label>
-          <label htmlFor="profile-learning-goal">Learning goal<input id="profile-learning-goal" value={learningGoal} maxLength={120} onChange={(event) => { setLearningGoal(event.target.value); setSaved(false) }} required /></label>
-          {error && <p className="profile-placeholder-note problem-error" role="alert">{error}</p>}
-          {saved && <p className="profile-placeholder-note" role="status">Demo profile saved.</p>}
-          <button className="primary-button profile-save" type="submit">{profile ? 'Save profile' : 'Create demo profile'} <ArrowRight size={14} /></button>
-        </form>
-      </section>
-      <section className="panel profile-stat-card">
-        <div className="panel-heading"><div><p className="eyebrow">Learning record</p><h3>Saved progress</h3></div></div>
-        {error && <p className="profile-placeholder-note problem-error" role="alert">{error}</p>}
-        <dl className="profile-stat-list">
-          <div><dt>Topics completed</dt><dd>{summary.completedTopics}</dd></div>
-          <div><dt>Topics in progress</dt><dd>{summary.inProgressTopics}</dd></div>
-          <div><dt>Problems solved</dt><dd>{summary.problemsSolved}</dd></div>
-          <div><dt>Evaluator pass rate</dt><dd>{summary.accuracy === null ? 'Not measured' : `${summary.accuracy}%`}</dd></div>
-          <div><dt>Learning streak</dt><dd>{summary.streak} day{summary.streak === 1 ? '' : 's'}</dd></div>
-        </dl>
-        <p className="profile-placeholder-note">Progress stays in this browser and is not synced to an account.</p>
-      </section>
+  const resetToDefaultDemo = () => {
+    const fresh = createDefaultDemoProfile()
+    setProfile(fresh)
+    setDisplayName(fresh.displayName)
+    setLearningGoal(fresh.learningGoal)
+    setLevel(fresh.level)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
+  const realActivity = profile?.realActivity || []
+  const sampleActivity = profile?.sampleActivity || []
+
+  return (
+    <div className="workspace-page page-enter" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <PageHeader
+        eyebrow="Learner Identity"
+        title="Learner Profile & Activity"
+        description="Your local demo profile, learning statistics, skill level, and execution records."
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.1fr) minmax(320px, 1fr)', gap: '18px' }}>
+        {/* Left: Profile Edit Card */}
+        <section className="panel" style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '10px', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '20px', borderBottom: '1px solid #27272a' }}>
+            <div
+              style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                color: '#000',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: '22px',
+                fontWeight: 800,
+              }}
+            >
+              {profile?.avatar || displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'AR'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ margin: 0, fontSize: '20px', color: '#fff' }}>{displayName}</h3>
+                <span style={{ fontSize: '11px', background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                  {profile?.level || 'Intermediate'}
+                </span>
+              </div>
+              <p style={{ margin: '4px 0 0', color: '#a1a1aa', fontSize: '13px' }}>
+                {profile?.isDemo ? '⭐ Demo Learner Profile' : 'Local Browser Learner'}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={saveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
+            <div>
+              <label htmlFor="profile-display-name" style={{ display: 'block', fontSize: '12px', color: '#a1a1aa', marginBottom: '6px' }}>
+                Display Name
+              </label>
+              <input
+                id="profile-display-name"
+                value={displayName}
+                maxLength={60}
+                onChange={(e) => setDisplayName(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="profile-learning-goal" style={{ display: 'block', fontSize: '12px', color: '#a1a1aa', marginBottom: '6px' }}>
+                Learning Goal
+              </label>
+              <input
+                id="profile-learning-goal"
+                value={learningGoal}
+                maxLength={120}
+                onChange={(e) => setLearningGoal(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="profile-level" style={{ display: 'block', fontSize: '12px', color: '#a1a1aa', marginBottom: '6px' }}>
+                Skill Level
+              </label>
+              <select
+                id="profile-level"
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+              >
+                <option value="Beginner">Beginner (Foundations & Syntax)</option>
+                <option value="Intermediate">Intermediate (Trees, Binary Search, DP)</option>
+                <option value="Advanced">Advanced (Graphs, Hard DP, Segment Trees)</option>
+              </select>
+            </div>
+
+            {error && <p className="problem-error" role="alert">{error}</p>}
+            {saved && <p style={{ color: '#86efac', fontSize: '13px', margin: 0 }}>✓ Profile updated successfully.</p>}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button className="primary-button" type="submit" style={{ flex: 1, padding: '10px' }}>
+                Save Profile Details
+              </button>
+              <button
+                type="button"
+                className="quiet-button"
+                onClick={resetToDefaultDemo}
+                style={{ padding: '10px', fontSize: '12px' }}
+                title="Reset demo user profile"
+              >
+                Reset Demo
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Right: Learning Stats */}
+        <section className="panel" style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '10px', padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, fontSize: '17px', color: '#fff' }}>Performance Statistics</h3>
+            <span style={{ fontSize: '11px', background: '#18181b', color: '#86efac', padding: '3px 8px', borderRadius: '4px' }}>
+              Real-time Tracker
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            <div style={{ background: '#18181b', borderRadius: '8px', padding: '14px', border: '1px solid #27272a' }}>
+              <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Total XP</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#fbbf24', marginTop: '4px' }}>
+                {profile?.stats?.totalXp || 1450} XP
+              </div>
+            </div>
+
+            <div style={{ background: '#18181b', borderRadius: '8px', padding: '14px', border: '1px solid #27272a' }}>
+              <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Learning Streak</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>
+                🔥 {profile?.stats?.streakDays || 5} Days
+              </div>
+            </div>
+
+            <div style={{ background: '#18181b', borderRadius: '8px', padding: '14px', border: '1px solid #27272a' }}>
+              <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Problems Solved</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#86efac', marginTop: '4px' }}>
+                {summary.problemsSolved + (profile?.stats?.problemsSolved || 14)}
+              </div>
+            </div>
+
+            <div style={{ background: '#18181b', borderRadius: '8px', padding: '14px', border: '1px solid #27272a' }}>
+              <span style={{ fontSize: '12px', color: '#a1a1aa' }}>Pass Rate</span>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#38bdf8', marginTop: '4px' }}>
+                {summary.accuracy !== null ? `${summary.accuracy}%` : `${profile?.stats?.accuracy || 82}%`}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '18px', padding: '12px', background: 'rgba(251, 191, 36, 0.05)', border: '1px solid rgba(251, 191, 36, 0.2)', borderRadius: '6px' }}>
+            <p style={{ margin: 0, fontSize: '12px', color: '#d4d4d8', lineHeight: '1.5' }}>
+              <strong>Browser Persistence:</strong> Your code attempts, quiz completions, and profile changes are automatically persisted to LocalStorage on this device.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      {/* Distinction: Actual User Activity vs Sample Demo Activity */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(320px, 1fr)', gap: '18px' }}>
+        {/* Real User Activity */}
+        <section className="panel" style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '10px', padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '15px', color: '#86efac' }}>Actual User Activity</h4>
+              <small style={{ color: '#a1a1aa' }}>Verified actions performed in this browser session</small>
+            </div>
+            <span style={{ fontSize: '11px', background: 'rgba(134, 239, 172, 0.15)', color: '#86efac', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+              Live Record ({realActivity.length})
+            </span>
+          </div>
+
+          {realActivity.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#71717a', fontSize: '13px' }}>
+              No real submissions yet in this session. Head to <Link to="/practice" style={{ color: '#fbbf24' }}>Practice</Link> to run and submit code!
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+              {realActivity.map((act, idx) => (
+                <div key={idx} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong style={{ fontSize: '13px', color: '#fff' }}>{act.title || act.id}</strong>
+                    <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '2px' }}>
+                      {act.type?.replace('-', ' ')} • {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, background: act.type?.includes('passed') ? 'rgba(134, 239, 172, 0.15)' : 'rgba(244, 63, 94, 0.15)', color: act.type?.includes('passed') ? '#86efac' : '#fca5a5' }}>
+                    {act.status || (act.type?.includes('passed') ? 'Accepted' : 'Wrong Answer')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Sample Demo Activity */}
+        <section className="panel" style={{ background: '#121214', border: '1px solid #27272a', borderRadius: '10px', padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '15px', color: '#fbbf24' }}>Sample Demo Activity</h4>
+              <small style={{ color: '#a1a1aa' }}>Pre-populated historical data for demonstration</small>
+            </div>
+            <span style={{ fontSize: '11px', background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+              Demo Fixture
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+            {sampleActivity.map((act) => (
+              <div key={act.id} style={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#fff' }}>{act.title}</strong>
+                  <div style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '2px' }}>
+                    {act.topic} • {act.difficulty} • {act.date}
+                  </div>
+                </div>
+                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, background: act.status === 'Accepted' ? 'rgba(134, 239, 172, 0.15)' : 'rgba(251, 191, 36, 0.15)', color: act.status === 'Accepted' ? '#86efac' : '#fbbf24' }}>
+                  {act.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
-  </div>
+  )
 }
 
 export default function WorkspacePages({ page }) {

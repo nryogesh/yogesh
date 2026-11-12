@@ -7,14 +7,10 @@ function positiveInteger(value, fallback, maximum) {
     : fallback
 }
 
-const defaultPort = process.env.npm_lifecycle_event === 'dev'
-  ? 3001
-  : process.env.PORT || 3001
-
 export const config = {
-  port: Number(process.env.BACKEND_PORT || defaultPort),
-  clientOrigin: process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173',
-  aiProvider: (process.env.AI_PROVIDER || 'local').toLowerCase(),
+  port: Number(process.env.BACKEND_PORT || 3000),
+  clientOrigin: process.env.CLIENT_ORIGIN || 'http://0.0.0.0:3000',
+  aiProvider: (process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini' : 'local')).toLowerCase(),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',

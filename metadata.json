@@ -1,0 +1,8 @@
+{
+  "name": "DSA AI Mentor",
+  "description": "Interactive Data Structures and Algorithms learning platform with AI tutoring, curriculum progression, code evaluation, and algorithm visualization.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

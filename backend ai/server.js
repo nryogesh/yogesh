@@ -28,10 +28,18 @@ app.use((request, _response, next) => {
 })
 
 app.use(cors({
-  origin: localDevelopmentOrigins,
+  origin: true,
   credentials: true,
 }))
 app.use(express.json({ limit: '32kb' }))
+
+app.get('/api', (_request, response) => {
+  response.json({
+    name: 'DSA Mentor Backend',
+    status: 'ok',
+    provider: config.aiProvider,
+  })
+})
 
 app.use('/api/health', healthRouter)
 app.use('/api/curriculum', curriculumRouter)
@@ -78,7 +86,7 @@ app.use((error, _request, response, _next) => {
   })
 })
 
-app.listen(config.port, () => {
-  console.log(`Mentor AI backend listening on http://127.0.0.1:${config.port}`)
+app.listen(config.port, '0.0.0.0', () => {
+  console.log(`Mentor AI backend listening on http://0.0.0.0:${config.port}`)
   console.log(`Configured AI provider: ${config.aiProvider}`)
 })

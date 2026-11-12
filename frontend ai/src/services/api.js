@@ -45,6 +45,21 @@ export async function fetchSubmissionStarter(assignmentId) {
   return data
 }
 
+export async function runJavaAssignment(assignmentId, source, customInput = null) {
+  const response = await fetch(`${API_BASE_URL}/api/submissions/${encodeURIComponent(assignmentId)}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, customInput }),
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok || data?.success !== true) {
+    throw new Error(data?.error || 'Could not run this Java solution')
+  }
+
+  return data
+}
+
 export async function submitJavaAssignment(assignmentId, source) {
   const response = await fetch(`${API_BASE_URL}/api/submissions/${encodeURIComponent(assignmentId)}/evaluate`, {
     method: 'POST',

@@ -8,26 +8,52 @@ function createSubmissionsRouter(submissionService = new SubmissionService()) {
   const router = express.Router()
 
   router.get('/:assignmentId', async (request, response) => {
+    const assignmentId = request.params.assignmentId
     const assignment = dsaTopics
       .filter((topic) => topic.status === 'published')
       .flatMap((topic) => topic.assignments)
-      .find((item) => item.id === request.params.assignmentId)
+      .find((item) => item.id === assignmentId)
 
-    if (!assignment) {
-      return response.status(404).json({ success: false, error: 'Published assignment was not found' })
+    const fixture = javaEvaluationCases[assignmentId]
+
+    if (!assignment && !fixture) {
+      return response.status(404).json({ success: false, error: 'Assignment was not found' })
     }
 
-    const starterCode = javaEvaluationCases[assignment.id]?.starterCode
-    const evaluationStatus = await submissionService.getEvaluationStatus(assignment.id)
+    const starterCode = fixture?.starterCode || null
+    const evaluationStatus = await submissionService.getEvaluationStatus(assignmentId)
+
     return response.json({
       success: true,
-      assignmentId: assignment.id,
-      language: assignment.language,
-      hasTests: Boolean(javaEvaluationCases[assignment.id]),
+      assignmentId,
+      title: assignment?.title || fixture?.title || assignmentId,
+      language: assignment?.language || 'Java',
+      hasTests: Boolean(fixture),
       evaluationAvailable: evaluationStatus.available,
       evaluationMessage: evaluationStatus.message,
-      starterCode: starterCode || null,
+      starterCode,
+      samples: fixture?.samples || [],
     })
+  })
+
+  router.post('/:assignmentId/run', async (request, response) => {
+    try {
+      const result = await submissionService.run({
+        assignmentId: request.params.assignmentId,
+        source: request.body?.source,
+        customInput: request.body?.customInput,
+      })
+      return response.json({ success: true, ...result })
+    } catch (error) {
+      if (error instanceof SubmissionInputError) {
+        return response.status(error.statusCode).json({ success: false, error: error.message })
+      }
+
+      return response.status(error.statusCode || 500).json({
+        success: false,
+        error: error.message || 'Java execution failed',
+      })
+    }
   })
 
   router.post('/:assignmentId/evaluate', async (request, response) => {
@@ -42,9 +68,9 @@ function createSubmissionsRouter(submissionService = new SubmissionService()) {
         return response.status(error.statusCode).json({ success: false, error: error.message })
       }
 
-      return response.status(error.statusCode || 503).json({
+      return response.status(error.statusCode || 500).json({
         success: false,
-        error: error.message || 'Java evaluation is unavailable',
+        error: error.message || 'Java evaluation failed',
       })
     }
   })
