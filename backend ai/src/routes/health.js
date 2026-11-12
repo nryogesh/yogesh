@@ -2,33 +2,41 @@ import express from 'express'
 import { createProvider } from '../ai/provider-factory.js'
 import { buildProviderStatus } from '../utils/provider-status.js'
 
-const router = express.Router()
+export function createHealthRouter(providerFactory = createProvider) {
+  const healthRouter = express.Router()
 
-router.get('/', async (_request, response) => {
-  const provider = createProvider()
-  const available = await provider.checkAvailability().catch(() => false)
-  const status = buildProviderStatus({
-    provider: provider.name,
-    available,
-    fallback: provider.name === 'local',
+  const getProviderStatus = async () => {
+    const provider = providerFactory()
+    const available = await provider.checkAvailability()
+    return buildProviderStatus({
+      provider: provider?.name || 'local',
+      available,
+      fallback: provider?.name === 'local',
+    })
+  }
+
+  const sendProviderStatus = async (response, includeOverallStatus = false) => {
+    try {
+      const status = await getProviderStatus()
+      response.json(includeOverallStatus ? { status: 'ok', ...status } : status)
+    } catch {
+      response.status(503).json({
+        status: 'error',
+        success: false,
+        error: 'AI provider status could not be determined',
+      })
+    }
+  }
+
+  healthRouter.get('/', async (_request, response) => {
+    await sendProviderStatus(response, true)
   })
 
-  response.json({
-    status: 'ok',
-    ...status,
-  })
-})
-
-router.get('/ai', async (_request, response) => {
-  const provider = createProvider()
-  const available = await provider.checkAvailability().catch(() => false)
-  const status = buildProviderStatus({
-    provider: provider.name,
-    available,
-    fallback: provider.name === 'local',
+  healthRouter.get('/ai', async (_request, response) => {
+    await sendProviderStatus(response)
   })
 
-  response.json(status)
-})
+  return healthRouter
+}
 
-export { router as healthRouter }
+export const healthRouter = createHealthRouter()

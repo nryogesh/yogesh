@@ -78,6 +78,24 @@ const topicContent = {
     commonMistakes: ['Off-by-one loop errors', 'Using = instead of == in conditions', 'Changing loop variable in the wrong place', 'Forgetting to initialize accumulator variables'],
     edgeCases: ['Empty input', 'Single element', 'Negative numbers', 'Largest or smallest value appearing at the start or end'],
     complexityNote: 'Most beginner logic runs in O(n) time when you scan a list once, and O(1) extra space if you only store a few variables.',
+    javaExample: {
+      title: 'Sum an array with a loop',
+      code: `public class Main {
+    static int sum(int[] values) {
+        int total = 0;
+        for (int value : values) {
+            total += value;
+        }
+        return total;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(sum(new int[] {3, 5, 7}));
+    }
+}`,
+      expectedOutput: '15',
+      explanation: 'The enhanced for loop visits every value once and adds it to the running total.',
+    },
     guidedPractice: [
       { question: 'Given an array of numbers, write a loop that finds the maximum value and explain the invariant you maintain.', hint: 'Keep a current maximum and compare every new number to it. If the new value is larger, replace the current maximum.' },
     ],
@@ -141,6 +159,27 @@ const topicContent = {
     commonMistakes: ['Looping one index too far', 'Checking the wrong boundary', 'Using stale values after updates', 'Forgetting to handle empty arrays'],
     edgeCases: ['Empty array', 'One element', 'Duplicate maximum values', 'Sorted versus unsorted input'],
     complexityNote: 'Access is O(1), traversal is O(n), and many array scans use O(1) extra space if they avoid extra arrays.',
+    javaExample: {
+      title: 'Find the largest array value',
+      code: `public class Main {
+    static int maximum(int[] values) {
+        if (values.length == 0) {
+            throw new IllegalArgumentException("Array must not be empty");
+        }
+        int largest = values[0];
+        for (int index = 1; index < values.length; index++) {
+            largest = Math.max(largest, values[index]);
+        }
+        return largest;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(maximum(new int[] {4, 9, 2, 7}));
+    }
+}`,
+      expectedOutput: '9',
+      explanation: 'Keep the largest value seen so far; each comparison preserves the invariant that it is the maximum of the visited prefix.',
+    },
     guidedPractice: [
       { question: 'Given an array, find the first index where the value is greater than the previous value. Explain how you know the answer is correct.', hint: 'Scan left to right and compare each element to the previous one. The first time it increases, you have found the answer.' },
     ],
@@ -204,6 +243,20 @@ const topicContent = {
     commonMistakes: ['Using == to compare strings', 'Forgetting the last index boundary', 'Not checking empty strings', 'Mutating a string when a new builder is needed'],
     edgeCases: ['Empty string', 'Single character', 'Repeated characters', 'Case-sensitive input'],
     complexityNote: 'Scanning a string is usually O(n) time and O(1) extra space unless you count frequencies or create extra buffers.',
+    javaExample: {
+      title: 'Reverse a string',
+      code: `public class Main {
+    static String reverse(String text) {
+        return new StringBuilder(text).reverse().toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println(reverse("mentor"));
+    }
+}`,
+      expectedOutput: 'rotnem',
+      explanation: 'StringBuilder provides a mutable character sequence; reverse changes its order before producing the result string.',
+    },
     guidedPractice: [
       { question: 'Write a method that counts how many vowels appear in a string. Explain how your loop decides whether a character is a vowel.', hint: 'Check each character one by one and compare it to a small set of vowels.' },
     ],
@@ -267,6 +320,28 @@ const topicContent = {
     commonMistakes: ['Forgetting to update low or high', 'Choosing the wrong midpoint formula', 'Using the wrong condition when target is missing', 'Not handling duplicates correctly'],
     edgeCases: ['Target missing', 'Single element', 'Duplicate values', 'Target at left or right boundary'],
     complexityNote: 'Binary search usually runs in O(log n) time with O(1) extra space.',
+    javaExample: {
+      title: 'Binary search in a sorted array',
+      code: `public class Main {
+    static int binarySearch(int[] values, int target) {
+        int left = 0;
+        int right = values.length - 1;
+        while (left <= right) {
+            int middle = left + (right - left) / 2;
+            if (values[middle] == target) return middle;
+            if (values[middle] < target) left = middle + 1;
+            else right = middle - 1;
+        }
+        return -1;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(binarySearch(new int[] {2, 5, 8, 12, 16}, 12));
+    }
+}`,
+      expectedOutput: '3',
+      explanation: 'Because the input is sorted, each comparison removes half of the remaining search interval.',
+    },
     guidedPractice: [
       { question: 'Explain why binary search is not suitable for an unsorted list and what property the list must maintain.', hint: 'If the list is not ordered, the middle element does not tell you which half still matters.' },
     ],
@@ -330,6 +405,32 @@ const topicContent = {
     commonMistakes: ['Confusing sort order with insertion order', 'Not considering dependencies on equal values', 'Assuming the fastest algorithm is always best for small arrays'],
     edgeCases: ['Already sorted input', 'Reverse-sorted input', 'Duplicate values', 'One-element arrays'],
     complexityNote: 'Insertion sort is O(n^2) worst case, while merge sort is O(n log n) and uses O(n) extra space.',
+    javaExample: {
+      title: 'Insertion sort',
+      code: `import java.util.Arrays;
+
+public class Main {
+    static void insertionSort(int[] values) {
+        for (int index = 1; index < values.length; index++) {
+            int current = values[index];
+            int previous = index - 1;
+            while (previous >= 0 && values[previous] > current) {
+                values[previous + 1] = values[previous];
+                previous--;
+            }
+            values[previous + 1] = current;
+        }
+    }
+
+    public static void main(String[] args) {
+        int[] values = {5, 2, 4, 1};
+        insertionSort(values);
+        System.out.println(Arrays.toString(values));
+    }
+}`,
+      expectedOutput: '[1, 2, 4, 5]',
+      explanation: 'The left side stays sorted; each new value shifts larger entries right and is inserted into the gap.',
+    },
     guidedPractice: [
       { question: 'Explain why insertion sort can be efficient on almost-sorted arrays even though its worst case is quadratic.', hint: 'When the data is already close to order, only a few elements need to move each time.' },
     ],
@@ -392,6 +493,43 @@ const topicContent = {
     commonMistakes: ['Losing the rest of the list by overwriting next before saving it', 'Not handling null head', 'Confusing list length with index access'],
     edgeCases: ['Empty list', 'Single element', 'Delete the head', 'Insert at the end'],
     complexityNote: 'Traversal is O(n), insertion or deletion at the head is O(1), and random access is O(n).',
+    javaExample: {
+      title: 'Reverse a singly linked list',
+      code: `public class Main {
+    static class Node {
+        int value;
+        Node next;
+        Node(int value) { this.value = value; }
+    }
+
+    static Node reverse(Node head) {
+        Node previous = null;
+        Node current = head;
+        while (current != null) {
+            Node next = current.next;
+            current.next = previous;
+            previous = current;
+            current = next;
+        }
+        return previous;
+    }
+
+    static void print(Node head) {
+        for (Node node = head; node != null; node = node.next) {
+            System.out.print(node.value + (node.next == null ? "" : " -> "));
+        }
+    }
+
+    public static void main(String[] args) {
+        Node head = new Node(1);
+        head.next = new Node(2);
+        head.next.next = new Node(3);
+        print(reverse(head));
+    }
+}`,
+      expectedOutput: '3 -> 2 -> 1',
+      explanation: 'Save the next link before redirecting the current node; then advance both pointers without losing the rest of the list.',
+    },
     guidedPractice: [
       { question: 'Explain what happens to the pointer chain when you insert a new node at the front of a singly linked list.', hint: 'Make the new node point to the current head before updating the head reference.' },
     ],
@@ -449,6 +587,26 @@ const topicContent = {
     commonMistakes: ['Checking the wrong top of stack', 'Forgetting to pop after a valid match', 'Not handling empty stack conditions'],
     edgeCases: ['Empty expression', 'Unmatched closing bracket', 'Nested mixed brackets'],
     complexityNote: 'Push and pop are O(1), and a stack uses O(n) space in the worst case.',
+    javaExample: {
+      title: 'Use a stack with Deque',
+      code: `import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class Main {
+    public static void main(String[] args) {
+        Deque<Integer> stack = new ArrayDeque<>();
+        stack.push(10);
+        stack.push(20);
+        System.out.println(stack.peek());
+        System.out.println(stack.pop());
+        System.out.println(stack.peek());
+    }
+}`,
+      expectedOutput: `20
+20
+10`,
+      explanation: 'push adds to the top, peek reads the top without removing it, and pop removes the most recently pushed value.',
+    },
     guidedPractice: [
       { question: 'Why do we push opening brackets and pop on matching closing brackets?', hint: 'The stack keeps the most recent unmatched opening bracket available for immediate validation.' },
     ],
@@ -506,6 +664,26 @@ const topicContent = {
     commonMistakes: ['Reading from the wrong end', 'Forgetting to advance front or rear', 'Not handling empty or full queue states'],
     edgeCases: ['Empty queue', 'Single item', 'Repeated enqueue and dequeue'],
     complexityNote: 'Enqueue and dequeue are O(1) on average, with O(n) space for the stored items.',
+    javaExample: {
+      title: 'Use a queue with Deque',
+      code: `import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class Main {
+    public static void main(String[] args) {
+        Deque<Integer> queue = new ArrayDeque<>();
+        queue.offerLast(10);
+        queue.offerLast(20);
+        System.out.println(queue.peekFirst());
+        System.out.println(queue.pollFirst());
+        System.out.println(queue.peekFirst());
+    }
+}`,
+      expectedOutput: `10
+10
+20`,
+      explanation: 'offerLast adds at the back and pollFirst removes from the front, so the earliest item leaves first.',
+    },
     guidedPractice: [
       { question: 'Why is a queue a better fit than a stack for BFS?', hint: 'BFS explores nodes by level, so nodes discovered earlier should be processed before later ones.' },
     ],
@@ -572,6 +750,22 @@ const topicContent = {
     commonMistakes: ['Forgetting the base case', 'Reducing the problem incorrectly', 'Not understanding call-stack order'],
     edgeCases: ['n = 0', 'n = 1', 'Negative input', 'Very deep recursion'],
     complexityNote: 'Recursive calls add stack depth, so time complexity is typically the number of recursive calls and space complexity is O(h), where h is the recursion depth.',
+    javaExample: {
+      title: 'Factorial with a base case',
+      code: `public class Main {
+    static long factorial(int number) {
+        if (number < 0) throw new IllegalArgumentException("Use a non-negative number");
+        if (number <= 1) return 1;
+        return number * factorial(number - 1);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(factorial(5));
+    }
+}`,
+      expectedOutput: '120',
+      explanation: 'The base case returns 1 for 0 and 1; each earlier call multiplies its number by the smaller factorial.',
+    },
     guidedPractice: [
       { question: 'What is the purpose of the base case in recursion?', hint: 'The base case prevents infinite repetition by telling the function when to stop calling itself.' },
     ],
@@ -634,6 +828,33 @@ const topicContent = {
     commonMistakes: ['Confusing preorder, inorder and postorder', 'Not handling null children', 'Forgetting recursion base case'],
     edgeCases: ['Single-node tree', 'Skewed tree', 'Missing left or right child', 'Empty tree'],
     complexityNote: 'DFS and BFS are each O(n) for a tree, and tree recursion uses O(h) stack space where h is the height of the tree.',
+    javaExample: {
+      title: 'Inorder traversal of a binary tree',
+      code: `public class Main {
+    static class Node {
+        int value;
+        Node left;
+        Node right;
+        Node(int value) { this.value = value; }
+    }
+
+    static void inorder(Node node) {
+        if (node == null) return;
+        inorder(node.left);
+        System.out.print(node.value + " ");
+        inorder(node.right);
+    }
+
+    public static void main(String[] args) {
+        Node root = new Node(2);
+        root.left = new Node(1);
+        root.right = new Node(3);
+        inorder(root);
+    }
+}`,
+      expectedOutput: '1 2 3',
+      explanation: 'Inorder traversal visits the left subtree, then the node, then the right subtree.',
+    },
     guidedPractice: [
       { question: 'Describe the difference between preorder and inorder traversal.', hint: 'Preorder visits the node before its children, while inorder visits the left subtree before the node and then the right subtree.' },
     ],

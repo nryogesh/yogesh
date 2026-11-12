@@ -85,6 +85,25 @@ test('tutor returns labelled topic-specific guidance for transient provider erro
   }
 })
 
+test('tutor transient fallback acknowledges the current question instead of a default topic', async () => {
+  const agent = new DsaTutorAgent({
+    name: 'gemini',
+    checkAvailability: async () => true,
+    generateResponse: async () => {
+      throw Object.assign(new Error('transient provider failure'), { code: 'TIMEOUT' })
+    },
+  })
+
+  const result = await agent.respond({
+    topic: 'Binary Search',
+    message: 'what is array give with an example',
+  })
+
+  assert.equal(result.fallback, true)
+  assert.match(result.response, /what is array give with an example/i)
+  assert.doesNotMatch(result.response, /For Binary Search/)
+})
+
 test('tutor does not disguise Gemini configuration errors as generated answers', async () => {
   const agent = new DsaTutorAgent({
     name: 'gemini',

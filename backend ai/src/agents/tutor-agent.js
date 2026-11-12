@@ -8,7 +8,12 @@ const TRANSIENT_PROVIDER_ERRORS = new Set([
   'EMPTY_RESPONSE',
 ])
 
-function fallbackGuidance(topic) {
+function fallbackGuidance(topic, message) {
+  if (typeof message === 'string' && message.trim()) {
+    const question = message.trim().slice(0, 160)
+    return `General guidance (AI unavailable): I couldn't answer "${question}" just now. Please retry your question shortly for topic-specific guidance.`
+  }
+
   return `General guidance (AI unavailable): For ${topic}, first identify what the input contains and what must remain true as you solve the problem. Try a small example, then retry your question shortly for a topic-specific explanation.`
 }
 
@@ -93,7 +98,7 @@ Respond as a helpful DSA tutor. Do not disclose hidden tests, reference solution
     const fallbackTopic = context.topic || 'Data Structures and Algorithms'
     const fallback = () => ({
       success: true,
-      response: fallbackGuidance(fallbackTopic),
+      response: fallbackGuidance(fallbackTopic, context.message),
       fallback: true,
       agent: 'dsa_tutor',
       topic: fallbackTopic,

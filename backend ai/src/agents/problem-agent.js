@@ -1,6 +1,6 @@
 import { createProvider } from '../ai/provider-factory.js'
 
-const PROBLEM_GENERATION_OPTIONS = { maxOutputTokens: 1536, timeoutMs: 18_000 }
+const PROBLEM_GENERATION_OPTIONS = { maxOutputTokens: 768 }
 
 function fallbackProblem({ topic, difficulty, userLevel, reason }) {
   const isSearchTopic = /search/i.test(topic)
@@ -48,7 +48,10 @@ function fallbackProblem({ topic, difficulty, userLevel, reason }) {
 function getFallbackReason(error) {
   if (error?.code === 'RESPONSE_TRUNCATED') return 'truncated_response'
   if (error?.code === 'TIMEOUT') return 'provider_timeout'
-  if (['SERVICE_UNAVAILABLE', 'NETWORK_ERROR', 'RATE_LIMITED'].includes(error?.code)) return 'provider_temporary_failure'
+  if (error?.code === 'RATE_LIMITED') return 'provider_rate_limited'
+  if (error?.code === 'CONFIGURATION_ERROR') return 'provider_credentials_rejected'
+  if (error?.code === 'MODEL_UNAVAILABLE') return 'provider_model_unavailable'
+  if (['SERVICE_UNAVAILABLE', 'NETWORK_ERROR'].includes(error?.code)) return 'provider_temporary_failure'
   if (/returned (an empty|an invalid|an incomplete) problem/i.test(error?.message || '')) return 'invalid_model_output'
   return 'provider_error'
 }

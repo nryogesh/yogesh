@@ -154,7 +154,7 @@ Java source is never executed by the Express API. A separately started worker ru
 5. Start the worker in a separate terminal:
 
    ```powershell
-   npm run worker --prefix "backend ai"
+   npm run worker
    ```
 
 6. Start the existing frontend and API normally. The assignment starter endpoint checks the authenticated worker health endpoint before enabling evaluation.

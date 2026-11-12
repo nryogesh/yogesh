@@ -1,5 +1,34 @@
 import { createProvider } from '../ai/provider-factory.js'
 
+const TRANSIENT_PROVIDER_ERRORS = new Set([
+  'RATE_LIMITED',
+  'SERVICE_UNAVAILABLE',
+  'NETWORK_ERROR',
+  'TIMEOUT',
+  'EMPTY_RESPONSE',
+  'CONFIGURATION_ERROR',
+  'MODEL_UNAVAILABLE',
+  'REQUEST_REJECTED',
+])
+
+function fallbackHint({ topic, difficulty, stage, reason }) {
+  const fallbackHints = [
+    `For ${topic}, first identify the property or invariant that can guide your approach.`,
+    `For ${topic}, use one of the stated constraints to choose a suitable approach, then trace a small example.`,
+    `For ${topic}, outline the main steps and check the boundary case where the approach changes direction.`,
+  ]
+
+  return {
+    success: true,
+    hint: fallbackHints[stage - 1],
+    difficulty,
+    topic,
+    stage,
+    fallback: true,
+    fallbackReason: reason,
+  }
+}
+
 export class HintAgent {
   constructor(provider = createProvider()) {
     this.provider = provider
@@ -24,19 +53,7 @@ export class HintAgent {
     ]
 
     if (!(await this.provider.checkAvailability())) {
-      const fallbackHints = [
-        `For ${topic}, first identify the property or invariant that can guide your approach.`,
-        `For ${topic}, use one of the stated constraints to choose a suitable approach, then trace a small example.`,
-        `For ${topic}, outline the main steps and check the boundary case where the approach changes direction.`,
-      ]
-      const fallbackHint = fallbackHints[stage - 1]
-      return {
-        success: true,
-        hint: fallbackHint,
-        difficulty,
-        topic,
-        stage,
-      }
+      return fallbackHint({ topic, difficulty, stage, reason: 'provider_unavailable' })
     }
 
     const historyText = conversationHistory.length
@@ -68,7 +85,29 @@ Recent conversation:
 ${historyText}
 
 Return only the hint in a concise, encouraging tone.`
-    const generated = await this.provider.generateResponse(prompt)
+    let generated
+    try {
+      generated = await this.provider.generateResponse(prompt)
+    } catch (error) {
+      if (TRANSIENT_PROVIDER_ERRORS.has(error?.code)) {
+        return fallbackHint({
+          topic,
+          difficulty,
+          stage,
+          reason: error.code === 'RATE_LIMITED'
+            ? 'provider_rate_limited'
+            : error.code === 'CONFIGURATION_ERROR'
+              ? 'provider_credentials_rejected'
+              : error.code === 'MODEL_UNAVAILABLE'
+                ? 'provider_model_unavailable'
+                : error.code === 'REQUEST_REJECTED'
+                  ? 'provider_request_rejected'
+                  : 'provider_temporary_failure',
+        })
+      }
+
+      throw error
+    }
     if (generated && typeof generated === 'object' && generated.success === false) {
       return generated
     }

@@ -62,6 +62,47 @@ test('hint agent returns a helpful fallback hint when the provider is unavailabl
   assert.match(result.hint, /Binary Search|midpoint|boundary/)
 })
 
+test('hint agent returns a labelled deterministic hint when Gemini is rate limited', async () => {
+  const agent = new HintAgent({
+    name: 'gemini',
+    checkAvailability: async () => true,
+    generateResponse: async () => {
+      throw Object.assign(new Error('safe provider error'), { code: 'RATE_LIMITED' })
+    },
+  })
+
+  const result = await agent.provideHint({
+    topic: 'Binary Search',
+    difficulty: 'beginner',
+    hintStage: 1,
+  })
+
+  assert.equal(result.success, true)
+  assert.equal(result.fallback, true)
+  assert.equal(result.fallbackReason, 'provider_rate_limited')
+  assert.match(result.hint, /Binary Search/)
+})
+
+test('hint agent returns a safe fallback when Gemini rejects its credentials or model', async () => {
+  for (const [code, reason] of [
+    ['CONFIGURATION_ERROR', 'provider_credentials_rejected'],
+    ['MODEL_UNAVAILABLE', 'provider_model_unavailable'],
+  ]) {
+    const agent = new HintAgent({
+      name: 'gemini',
+      checkAvailability: async () => true,
+      generateResponse: async () => {
+        throw Object.assign(new Error('private provider details'), { code })
+      },
+    })
+
+    const result = await agent.provideHint({ topic: 'Binary Search', hintStage: 1 })
+    assert.equal(result.fallback, true)
+    assert.equal(result.fallbackReason, reason)
+    assert.doesNotMatch(JSON.stringify(result), /private provider details/i)
+  }
+})
+
 test('fallback hints progress with prior hints and stay topic-neutral', async () => {
   const provider = {
     name: 'local',

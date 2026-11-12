@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import cors from 'cors'
 import express from 'express'
 import { config } from './src/config.js'
@@ -10,6 +13,8 @@ import { problemsRouter } from './src/routes/problems.js'
 import { submissionsRouter } from './src/routes/submissions.js'
 
 const app = express()
+const frontendDist = resolve(dirname(fileURLToPath(import.meta.url)), '../frontend ai/dist')
+const frontendIndex = resolve(frontendDist, 'index.html')
 const localDevelopmentOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
@@ -34,6 +39,21 @@ app.use('/api/chat', chatRouter)
 app.use('/api/hints', hintsRouter)
 app.use('/api/problems', problemsRouter)
 app.use('/api/submissions', submissionsRouter)
+
+if (existsSync(frontendIndex)) {
+  app.use(express.static(frontendDist))
+  app.get('/{*path}', (request, response, next) => {
+    if (request.path === '/api' || request.path.startsWith('/api/')) {
+      return next()
+    }
+
+    response.sendFile(frontendIndex, (error) => {
+      if (error) {
+        next(error)
+      }
+    })
+  })
+}
 
 app.get('/', (_request, response) => {
   response.json({

@@ -16,57 +16,70 @@ test('gemini provider extracts text from a Gemini response payload', async () =>
   provider.apiKey = 'test-key'
   const originalFetch = global.fetch
   let requestBody
-  global.fetch = async (_endpoint, options) => {
+  let requestEndpoint
+  let requestHeaders
+  let responseJsonCalls = 0
+  global.fetch = async (endpoint, options) => {
+    requestEndpoint = endpoint
+    requestHeaders = options.headers
     requestBody = JSON.parse(options.body)
-    return ({
-    ok: true,
-    json: async () => ({
-      candidates: [{
-        content: {
-          parts: [{ text: 'Binary search narrows the range each step.' }],
-        },
-      }],
-    }),
-    })
-
-    test('gemini provider applies per-request token and timeout limits', async () => {
-      const provider = new GeminiAIProvider()
-      provider.apiKey = 'test-key'
-      const originalFetch = global.fetch
-      const originalSetTimeout = globalThis.setTimeout
-      let requestBody
-      let timeoutDelay
-
-      globalThis.setTimeout = (callback, delay, ...args) => {
-        if (delay === 18_000) timeoutDelay = delay
-        return originalSetTimeout(callback, delay, ...args)
-      }
-      global.fetch = async (_endpoint, options) => {
-        requestBody = JSON.parse(options.body)
+    return {
+      ok: true,
+      json: async () => {
+        responseJsonCalls += 1
+        if (responseJsonCalls > 1) throw new TypeError('Response body has already been consumed')
         return {
-          ok: true,
-          json: async () => ({
-            candidates: [{ content: { parts: [{ text: 'A concise generated problem.' }] } }],
-          }),
+          candidates: [{
+            content: {
+              parts: [{ text: 'Binary search narrows the range each step.' }],
+            },
+          }],
         }
-      }
-
-      try {
-        await provider.generateResponse('Generate a short problem', { maxOutputTokens: 1536, timeoutMs: 18_000 })
-        assert.equal(requestBody.generationConfig.maxOutputTokens, 1536)
-        assert.equal(timeoutDelay, 18_000)
-      } finally {
-        global.fetch = originalFetch
-        globalThis.setTimeout = originalSetTimeout
-      }
-    })
+      },
+    }
   }
   try {
     const result = await provider.generateResponse('Explain binary search')
     assert.equal(result, 'Binary search narrows the range each step.')
     assert.equal(requestBody.generationConfig.maxOutputTokens, config.geminiMaxOutputTokens)
+    assert.match(requestEndpoint, /:generateContent$/)
+    assert.doesNotMatch(requestEndpoint, /test-key|[?&]key=/)
+    assert.equal(requestHeaders['x-goog-api-key'], 'test-key')
+    assert.equal(responseJsonCalls, 1)
   } finally {
     global.fetch = originalFetch
+  }
+})
+
+test('gemini provider applies per-request token and timeout limits', async () => {
+  const provider = new GeminiAIProvider()
+  provider.apiKey = 'test-key'
+  const originalFetch = global.fetch
+  const originalSetTimeout = globalThis.setTimeout
+  let requestBody
+  let timeoutDelay
+
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 18_000) timeoutDelay = delay
+    return originalSetTimeout(callback, delay, ...args)
+  }
+  global.fetch = async (_endpoint, options) => {
+    requestBody = JSON.parse(options.body)
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'A concise generated problem.' }] } }],
+      }),
+    }
+  }
+
+  try {
+    await provider.generateResponse('Generate a short problem', { maxOutputTokens: 1536, timeoutMs: 18_000 })
+    assert.equal(requestBody.generationConfig.maxOutputTokens, 1536)
+    assert.equal(timeoutDelay, 18_000)
+  } finally {
+    global.fetch = originalFetch
+    globalThis.setTimeout = originalSetTimeout
   }
 })
 
@@ -205,8 +218,12 @@ test('gemini provider reports a clean timeout without retrying', async () => {
   provider.apiKey = 'test-key'
   const originalFetch = global.fetch
   const originalSetTimeout = globalThis.setTimeout
+  const originalWarn = console.warn
   let requests = 0
   let timeoutDelay
+  let timingLog
+
+  console.warn = (...values) => { timingLog = values }
 
   globalThis.setTimeout = (callback, delay, ...args) => {
     if (delay === config.geminiRequestTimeoutMs) {
@@ -233,9 +250,100 @@ test('gemini provider reports a clean timeout without retrying', async () => {
     )
     assert.equal(timeoutDelay, config.geminiRequestTimeoutMs)
     assert.equal(requests, 1)
+    assert.equal(timingLog[0], '[ai] Gemini generation timing')
+    const timing = JSON.parse(timingLog[1])
+    assert.equal(timing.category, 'TIMEOUT')
+    assert.equal(timing.headersMs, null)
+    assert.equal(timing.bodyMs, null)
+    assert.equal(timing.httpStatus, null)
+    assert.ok(timing.totalMs >= 0)
   } finally {
     global.fetch = originalFetch
     globalThis.setTimeout = originalSetTimeout
+    console.warn = originalWarn
+  }
+})
+
+test('gemini provider timing separates delayed headers from body parsing', async () => {
+  const provider = new GeminiAIProvider()
+  provider.apiKey = 'test-key'
+  const originalFetch = global.fetch
+  const originalInfo = console.info
+  let timingLog
+
+  console.info = (...values) => { timingLog = values }
+  global.fetch = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    return {
+      ok: true,
+      status: 200,
+      json: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15))
+        return { candidates: [{ content: { parts: [{ text: 'A delayed response.' }] } }] }
+      },
+    }
+  }
+
+  try {
+    assert.equal(
+      await provider.generateResponse('Explain arrays', { timeoutMs: 500 }),
+      'A delayed response.'
+    )
+    assert.equal(timingLog[0], '[ai] Gemini generation timing')
+    const timing = JSON.parse(timingLog[1])
+    assert.equal(timing.category, 'SUCCESS')
+    assert.equal(timing.httpStatus, 200)
+    assert.ok(timing.headersMs >= 15)
+    assert.ok(timing.bodyMs >= 10)
+    assert.ok(timing.totalMs >= timing.headersMs + timing.bodyMs)
+    assert.deepEqual(Object.keys(timing).sort(), ['bodyMs', 'category', 'headersMs', 'httpStatus', 'totalMs'])
+  } finally {
+    global.fetch = originalFetch
+    console.info = originalInfo
+  }
+})
+
+test('gemini provider times body parsing out and records body duration', async () => {
+  const provider = new GeminiAIProvider()
+  provider.apiKey = 'test-key'
+  const originalFetch = global.fetch
+  const originalWarn = console.warn
+  let timingLog
+
+  console.warn = (...values) => { timingLog = values }
+  global.fetch = async (_endpoint, { signal }) => ({
+    ok: true,
+    status: 200,
+    json: async () => new Promise((_resolve, reject) => {
+      const abort = () => {
+        const error = new Error('This operation was aborted')
+        error.name = 'AbortError'
+        reject(error)
+      }
+      if (signal.aborted) {
+        abort()
+      } else {
+        signal.addEventListener('abort', abort, { once: true })
+      }
+    }),
+  })
+
+  try {
+    await assert.rejects(
+      provider.generateResponse('Explain arrays', { timeoutMs: 30 }),
+      { code: 'TIMEOUT' }
+    )
+    assert.equal(timingLog[0], '[ai] Gemini generation timing')
+    const timing = JSON.parse(timingLog[1])
+    assert.equal(timing.category, 'TIMEOUT')
+    assert.equal(timing.httpStatus, 200)
+    assert.ok(Number.isInteger(timing.headersMs))
+    assert.ok(timing.bodyMs >= 15)
+    assert.ok(timing.totalMs >= timing.headersMs + timing.bodyMs)
+    assert.deepEqual(Object.keys(timing).sort(), ['bodyMs', 'category', 'headersMs', 'httpStatus', 'totalMs'])
+  } finally {
+    global.fetch = originalFetch
+    console.warn = originalWarn
   }
 })
 
@@ -244,9 +352,21 @@ test('gemini provider does not retry a rate-limited request', async () => {
   provider.apiKey = 'test-key'
   const originalFetch = global.fetch
   let requests = 0
+  let warning = ''
+  const originalWarn = console.warn
+  console.warn = (...values) => { warning = values.join(' ') }
   global.fetch = async () => {
     requests += 1
-    return { ok: false, status: 429, json: async () => ({ error: { message: 'private provider detail' } }) }
+    return {
+      ok: false,
+      status: 429,
+      json: async () => ({
+        error: {
+          status: 'RESOURCE_EXHAUSTED',
+          message: 'private provider detail',
+        },
+      }),
+    }
   }
 
   try {
@@ -254,12 +374,18 @@ test('gemini provider does not retry a rate-limited request', async () => {
       provider.generateResponse('Explain binary search'),
       (error) => error instanceof GeminiProviderError &&
         error.code === 'RATE_LIMITED' &&
+        error.httpStatus === 429 &&
+        error.providerStatus === 'RESOURCE_EXHAUSTED' &&
         error.message.includes('wait a moment') &&
         !error.message.includes('private provider detail')
     )
     assert.equal(requests, 1)
+    assert.match(warning, /RATE_LIMITED/)
+    assert.match(warning, /"httpStatus":429/)
+    assert.doesNotMatch(warning, /test-key|private provider detail|Explain binary search|RESOURCE_EXHAUSTED/)
   } finally {
     global.fetch = originalFetch
+    console.warn = originalWarn
   }
 })
 
@@ -326,6 +452,30 @@ test('gemini provider reports credential errors without retrying or echoing prov
       (error) => error.code === 'CONFIGURATION_ERROR' &&
         error.message.includes('GEMINI_API_KEY') &&
         !error.message.includes('sensitive provider detail')
+    )
+    assert.equal(requests, 1)
+  } finally {
+    global.fetch = originalFetch
+  }
+})
+
+test('gemini provider reports unavailable models without exposing provider details', async () => {
+  const provider = new GeminiAIProvider()
+  provider.apiKey = 'test-key'
+  const originalFetch = global.fetch
+  let requests = 0
+  global.fetch = async () => {
+    requests += 1
+    return { ok: false, status: 404, json: async () => ({ error: { message: 'private model detail' } }) }
+  }
+
+  try {
+    await assert.rejects(
+      provider.generateResponse('Explain binary search'),
+      (error) => error.code === 'MODEL_UNAVAILABLE' &&
+        error.httpStatus === 404 &&
+        error.message.includes('GEMINI_MODEL') &&
+        !error.message.includes('private model detail')
     )
     assert.equal(requests, 1)
   } finally {

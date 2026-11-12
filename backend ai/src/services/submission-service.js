@@ -149,7 +149,7 @@ export class SubmissionService {
     } catch {
       return {
         available: false,
-        message: 'The isolated Java worker could not be reached. Start it with `npm run worker --prefix "backend ai"` and try again.',
+        message: 'The isolated Java worker could not be reached. Start it from the repository root with `npm run worker` and try again.',
       }
     }
 

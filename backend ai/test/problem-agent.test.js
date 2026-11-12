@@ -21,7 +21,7 @@ function provider({ available = true, result = validProblem, error } = {}) {
   }
 }
 
-test('problem agent validates generated output and requests bounded concise generation', async () => {
+test('problem agent validates generated output with a concise token cap and provider timeout', async () => {
   const ai = provider()
   const result = await new ProblemGeneratorAgent(ai).generate({
     topic: 'Arrays',
@@ -33,7 +33,7 @@ test('problem agent validates generated output and requests bounded concise gene
   assert.equal(result.fallback, false)
   assert.equal(result.fallbackReason, undefined)
   assert.equal(result.title, 'Find the first match')
-  assert.deepEqual(ai.options, { maxOutputTokens: 1536, timeoutMs: 18000 })
+  assert.deepEqual(ai.options, { maxOutputTokens: 768 })
 })
 
 test('problem agent returns a clearly marked local problem if provider is unavailable', async () => {
@@ -57,6 +57,7 @@ test('problem agent falls back on malformed and incomplete model output', async 
 test('problem agent handles truncation, temporary failures, and timeouts with fallback', async () => {
   for (const [code, reason] of [
     ['RESPONSE_TRUNCATED', 'truncated_response'],
+    ['RATE_LIMITED', 'provider_rate_limited'],
     ['SERVICE_UNAVAILABLE', 'provider_temporary_failure'],
     ['TIMEOUT', 'provider_timeout'],
   ]) {
@@ -66,5 +67,19 @@ test('problem agent handles truncation, temporary failures, and timeouts with fa
     assert.equal(problem.fallback, true)
     assert.equal(problem.fallbackReason, reason)
     assert.doesNotMatch(JSON.stringify(problem), /upstream details|stack|api key/i)
+  }
+})
+
+test('problem agent safely marks invalid Gemini credentials and unavailable models', async () => {
+  for (const [code, reason] of [
+    ['CONFIGURATION_ERROR', 'provider_credentials_rejected'],
+    ['MODEL_UNAVAILABLE', 'provider_model_unavailable'],
+  ]) {
+    const problem = await new ProblemGeneratorAgent(provider({
+      error: Object.assign(new Error('private provider details'), { code }),
+    })).generate({ topic: 'Arrays' })
+    assert.equal(problem.fallback, true)
+    assert.equal(problem.fallbackReason, reason)
+    assert.doesNotMatch(JSON.stringify(problem), /private provider details/i)
   }
 })

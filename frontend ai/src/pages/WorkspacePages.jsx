@@ -1,25 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import './WorkspacePages.css'
 import './PracticeProblem.css'
 import './Curriculum.css'
+import './LearningExperience.css'
 import { fetchCurriculum, fetchSubmissionStarter, generateProblem, postHint, submitCurriculumQuiz, submitJavaAssignment } from '../services/api'
-import { loadLearningProgress, markAssignmentPassed, markLessonViewed, markQuizPassed, saveLearningProgress } from '../services/learning-progress'
+import { loadLearningProgress, markLessonViewed, markQuizPassed, recordAssignmentAttempt, saveLearningProgress } from '../services/learning-progress'
+import { summarizeLearning } from '../services/learning-summary'
+import { loadLearnerProfile, saveLearnerProfile } from '../services/learner-profile'
 import {
-  ArrowRight, BookOpen, BrainCircuit, Search, Settings, UserRound, Zap,
+  ArrowRight, BookOpen, BrainCircuit, Search, UserRound, Zap,
 } from 'lucide-react'
 
 function PageHeader({ eyebrow, title, description, action }) {
-  const note = eyebrow === 'Deliberate practice'
-    ? 'Practice suggestions are static examples; results are not saved.'
-    : eyebrow === 'Your workspace'
-      ? 'Profile activity values are sample data; progress is not tracked.'
-      : ''
-  const headerDescription = eyebrow === 'Deliberate practice'
-    ? 'Generate a practice problem on request. Practice results are not saved.'
-    : description
-
-  return <section className="workspace-header"><div><p className="eyebrow accent-eyebrow">{eyebrow}</p><h2>{title}</h2><p className="muted">{headerDescription}</p>{note && <p className="workspace-disclaimer">{note}</p>}</div>{eyebrow !== 'Deliberate practice' && action}</section>
+  return <section className="workspace-header"><div><p className="eyebrow accent-eyebrow">{eyebrow}</p><h2>{title}</h2><p className="muted">{description}</p></div>{action}</section>
 }
 
 function Roadmap() {
@@ -43,13 +37,14 @@ function Roadmap() {
         {topic.progression.unmetPrerequisites.length > 0 && <p><strong>Prerequisites to complete:</strong> {topic.progression.unmetPrerequisites.map(topicName).join(', ')}</p>}
         <p>{topic.progression.lessonViewed ? 'Lesson viewed' : topic.lessonAvailable ? 'Lesson not viewed' : 'Lesson still being authored'} · {topic.progression.completedAssignmentIds.length} / {topic.completionRequirements.assignmentIds.length} assignments · {topic.progression.passedQuizIds.length} / {topic.completionRequirements.quizIds.length} quizzes passed</p>
         {topic.progression.nextRecommendedTopic && <p><strong>Next recommended:</strong> {topic.progression.nextRecommendedTopic.title}</p>}
-        <Link className="text-button" to="/topics">Open topic <ArrowRight size={14} /></Link>
+        <Link className="text-button" to={`/topics/${topic.id}`}>Open topic <ArrowRight size={14} /></Link>
       </div>
     </li>)}</ol>
   </div>
 }
 
-function Topics() {
+function Topics({ routeTopicId }) {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [topics, setTopics] = useState([])
   const [selectedTopicId, setSelectedTopicId] = useState('')
@@ -85,9 +80,19 @@ function Topics() {
     }
   }, [reloadKey])
 
+  useEffect(() => {
+    if (routeTopicId && topics.length > 0 && !topics.some((topic) => topic.id === routeTopicId)) {
+      navigate('/topics', { replace: true })
+    }
+  }, [routeTopicId, topics, navigate])
+
   const filteredTopics = topics.filter((topic) => topic.name.toLowerCase().includes(query.toLowerCase()))
-  const selectedTopic = topics.find((topic) => topic.id === selectedTopicId)
+  const selectedTopic = topics.find((topic) => topic.id === (routeTopicId || selectedTopicId))
   const getTopicName = (topicId) => topics.find((topic) => topic.id === topicId)?.name || topicId
+  const openTopic = (topicId) => {
+    setSelectedTopicId(topicId)
+    navigate(`/topics/${topicId}`)
+  }
   const updateProgress = async (nextProgress) => {
     try {
       const savedProgress = saveLearningProgress(nextProgress)
@@ -143,7 +148,7 @@ function Topics() {
     {!loading && !error && topics.length > 0 && <div className="curriculum-layout">
       <nav className="curriculum-directory" aria-label="Curriculum topics">
         {filteredTopics.length === 0 && <p className="curriculum-state">No topics match your search.</p>}
-        {filteredTopics.map((topic) => <button className={`curriculum-topic-link ${selectedTopicId === topic.id ? 'selected' : ''}`} key={topic.id} onClick={() => setSelectedTopicId(topic.id)} aria-current={selectedTopicId === topic.id ? 'page' : undefined}>
+        {filteredTopics.map((topic) => <button className={`curriculum-topic-link ${(routeTopicId || selectedTopicId) === topic.id ? 'selected' : ''}`} key={topic.id} onClick={() => openTopic(topic.id)} aria-current={(routeTopicId || selectedTopicId) === topic.id ? 'page' : undefined}>
           <span className="curriculum-topic-icon"><BookOpen size={16} /></span>
           <span className="curriculum-topic-copy"><strong>{topic.name}</strong><small>{topic.category} · {topic.level}</small></span>
           <span className={`curriculum-status state-${topic.progression.status}`}>{statusLabel(topic)}</span>
@@ -162,29 +167,73 @@ function Topics() {
             const quizzesRemaining = prerequisite
               ? prerequisite.completionRequirements.quizIds.length - prerequisite.progression.passedQuizIds.length
               : 0
-            return <li key={topicId}><button className="text-button" onClick={() => setSelectedTopicId(topicId)}>{getTopicName(topicId)}</button>{unmet ? ` — ${prerequisite?.progression.lessonViewed ? 'lesson viewed' : 'view lesson'}, ${assignmentsRemaining} assignment(s), ${quizzesRemaining} quiz(es) remaining` : ' — complete'}</li>
+            return <li key={topicId}><button className="text-button" onClick={() => openTopic(topicId)}>{getTopicName(topicId)}</button>{unmet ? ` — ${prerequisite?.progression.lessonViewed ? 'lesson viewed' : 'view lesson'}, ${assignmentsRemaining} assignment(s), ${quizzesRemaining} quiz(es) remaining` : ' — complete'}</li>
           })}</ul>}</section>}
           {selectedTopic.progression.unlocked && <>
           <section className="topic-progress-panel" aria-label="Topic progress">
             {selectedTopic.progression.status === 'completed'
-              ? <><strong>Topic completed</strong><p>Lesson viewed, all assignments completed, and quiz passed.</p>{selectedTopic.progression.nextRecommendedTopic && <button className="primary-button" onClick={() => setSelectedTopicId(selectedTopic.progression.nextRecommendedTopic.id)}>Continue to {selectedTopic.progression.nextRecommendedTopic.title}<ArrowRight size={14} /></button>}</>
+              ? <><strong>Topic completed</strong><p>Lesson viewed, all assignments completed, and quiz passed.</p>{selectedTopic.progression.nextRecommendedTopic && <button className="primary-button" onClick={() => openTopic(selectedTopic.progression.nextRecommendedTopic.id)}>Continue to {selectedTopic.progression.nextRecommendedTopic.title}<ArrowRight size={14} /></button>}</>
               : <><strong>{selectedTopic.progression.status === 'available' ? 'Ready to start' : 'In progress'}</strong><p>{selectedTopic.progression.status === 'available' ? 'Start the lesson when you are ready.' : `${requirementsRemaining(selectedTopic)} completion requirement${requirementsRemaining(selectedTopic) === 1 ? '' : 's'} remaining.`}</p><button className="primary-button" onClick={() => startOrContinueTopic(selectedTopic)}>{selectedTopic.progression.status === 'available' ? 'Start Learning' : 'Continue Learning'} <ArrowRight size={14} /></button></>}
             <Link className="quiet-button" to="/tutor" state={{ topic: selectedTopic.name, difficulty: selectedTopic.level }}><BrainCircuit size={15} /> Ask AI Tutor</Link>
           </section>
           <section className="curriculum-section topic-objectives"><h4>1. Learning objectives</h4><ul>{selectedTopic.learningObjectives.map((objective) => <li key={objective}>{objective}</li>)}</ul></section>
           <section className="curriculum-section topic-lesson" id="topic-lesson"><h4>2. Lesson / concept explanation</h4>{selectedTopic.lessonSections.map((section, index) => <article className="topic-concept-card" key={section.title}><span className="topic-step-number">{index + 1}</span><div><h5>{section.title}</h5><p>{section.explanation}</p></div></article>)}<button className="quiet-button" disabled={selectedTopic.progression.lessonViewed} onClick={() => updateProgress(markLessonViewed(progress, selectedTopic.id))}>{selectedTopic.progression.lessonViewed ? 'Lesson viewed' : 'Mark lesson viewed'}</button></section>
           <section className="curriculum-section topic-example"><h4>3. Worked example</h4><article className="worked-example-card"><h5>{selectedTopic.workedExample.title}</h5><ol>{selectedTopic.workedExample.steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol><p className="curriculum-dry-run"><strong>Dry run:</strong> {selectedTopic.workedExample.dryRun}</p></article></section>
-          <section className="curriculum-section topic-notes"><h4>4. Notes / key points</h4><ul>{selectedTopic.referenceNotes.map((note) => <li key={note}>{note}</li>)}</ul>{selectedTopic.referenceLinks.length > 0 && <div className="curriculum-links"><h5>Further reading</h5>{selectedTopic.referenceLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label}<span>{link.kind}</span></a>)}</div>}</section>
-          <section className="curriculum-section topic-practice"><h4>5. Practice assignments</h4><p>Work through the exercises; assignment completion is recorded after the evaluator confirms a passing solution.</p>{['beginner', 'intermediate', 'advanced'].map((difficulty) => {
+          {selectedTopic.javaExample && <section className="curriculum-section topic-java-example"><h4>4. Java implementation</h4><h5>{selectedTopic.javaExample.title}</h5><p>{selectedTopic.javaExample.explanation}</p><pre><code>{selectedTopic.javaExample.code}</code></pre><p><strong>Expected output</strong></p><pre><code>{selectedTopic.javaExample.expectedOutput}</code></pre></section>}
+          {selectedTopic.complexityNote && <section className="curriculum-section topic-complexity"><h4>5. Complexity</h4><p>{selectedTopic.complexityNote}</p></section>}
+          <section className="curriculum-section topic-notes"><h4>6. Notes / key points</h4><ul>{selectedTopic.referenceNotes.map((note) => <li key={note}>{note}</li>)}</ul>{selectedTopic.commonMistakes?.length > 0 && <><h5>Common mistakes</h5><ul>{selectedTopic.commonMistakes.map((mistake) => <li key={mistake}>{mistake}</li>)}</ul></>}{selectedTopic.referenceLinks.length > 0 && <div className="curriculum-links"><h5>Further reading</h5>{selectedTopic.referenceLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label}<span>{link.kind}</span></a>)}</div>}</section>
+          <section className="curriculum-section topic-practice"><h4>7. Practice assignments</h4><p>Work through the exercises; assignment completion is recorded after the evaluator confirms a passing solution.</p>{['beginner', 'intermediate', 'advanced'].map((difficulty) => {
             const assignments = selectedTopic.assignments.filter((assignment) => assignment.difficulty === difficulty)
             return <div className="topic-difficulty-group" key={difficulty}><h5><span className={`difficulty ${difficulty}`}>{difficulty}</span></h5>{assignments.length === 0 ? <p>No {difficulty} assignments are available for this topic yet.</p> : <ul>{assignments.map((assignment) => <li key={assignment.id}>{assignment.title} — {selectedTopic.progression.completedAssignmentIds.includes(assignment.id) ? 'completed' : 'not completed'}</li>)}</ul>}</div>
           })}<Link className="text-button" to="/practice">Open Practice assignments <ArrowRight size={14} /></Link></section>
-          <section className="curriculum-section topic-quiz"><h4>6. Quiz</h4>{selectedTopic.quizzes.map((quiz) => <article className="curriculum-question" key={quiz.id}><h5>Check your understanding</h5>{quiz.questions.map((question, questionIndex) => <fieldset className="curriculum-quiz-question" key={`${quiz.id}-${questionIndex}`}><legend>{question.question}</legend>{question.options.map((option) => <label key={option}><input type="radio" name={`${quiz.id}-${questionIndex}`} value={option} checked={quizAnswers[quiz.id]?.[questionIndex] === option} onChange={() => setQuizAnswers((current) => ({ ...current, [quiz.id]: { ...current[quiz.id], [questionIndex]: option } }))} />{option}</label>)}</fieldset>)}<button className="quiet-button" onClick={() => submitQuiz(quiz)} disabled={quizStatus[quiz.id]?.loading || selectedTopic.progression.passedQuizIds.includes(quiz.id)}>{quizStatus[quiz.id]?.loading ? 'Checking...' : selectedTopic.progression.passedQuizIds.includes(quiz.id) ? 'Quiz passed' : 'Submit quiz'}</button>{quizStatus[quiz.id]?.message && <p role="status">{quizStatus[quiz.id].message}</p>}</article>)}</section>
-          <section className="curriculum-section topic-tutor"><h4>7. Ask AI Tutor</h4><p>Ask a question about {selectedTopic.name} or request a simpler explanation or example.</p><Link className="primary-button" to="/tutor" state={{ topic: selectedTopic.name, difficulty: selectedTopic.level }}><BrainCircuit size={15} /> Ask AI Tutor <ArrowRight size={14} /></Link></section>
+          <section className="curriculum-section topic-quiz"><h4>8. Quiz</h4>{selectedTopic.quizzes.map((quiz) => <article className="curriculum-question" key={quiz.id}><h5>Check your understanding</h5>{quiz.questions.map((question, questionIndex) => <fieldset className="curriculum-quiz-question" key={`${quiz.id}-${questionIndex}`}><legend>{question.question}</legend>{question.options.map((option) => <label key={option}><input type="radio" name={`${quiz.id}-${questionIndex}`} value={option} checked={quizAnswers[quiz.id]?.[questionIndex] === option} onChange={() => setQuizAnswers((current) => ({ ...current, [quiz.id]: { ...current[quiz.id], [questionIndex]: option } }))} />{option}</label>)}</fieldset>)}<button className="quiet-button" onClick={() => submitQuiz(quiz)} disabled={quizStatus[quiz.id]?.loading || selectedTopic.progression.passedQuizIds.includes(quiz.id)}>{quizStatus[quiz.id]?.loading ? 'Checking...' : selectedTopic.progression.passedQuizIds.includes(quiz.id) ? 'Quiz passed' : 'Submit quiz'}</button>{quizStatus[quiz.id]?.message && <p role="status">{quizStatus[quiz.id].message}</p>}</article>)}</section>
+          <section className="curriculum-section topic-tutor"><h4>9. Ask AI Tutor</h4><p>Ask a question about {selectedTopic.name} or request a simpler explanation or example.</p><Link className="primary-button" to="/tutor" state={{ topic: selectedTopic.name, difficulty: selectedTopic.level }}><BrainCircuit size={15} /> Ask AI Tutor <ArrowRight size={14} /></Link></section>
           </>}
         </article>}
       </section>
     </div>}
+  </div>
+}
+
+function Notes() {
+  const [query, setQuery] = useState('')
+  const [topics, setTopics] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetchCurriculum()
+      .then((curriculum) => {
+        if (active) setTopics(curriculum.filter((topic) => topic.notesAvailable && topic.referenceNotes?.length))
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message || 'Could not load topic notes.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const filteredTopics = topics.filter((topic) => (
+    topic.name.toLowerCase().includes(query.toLowerCase()) ||
+    topic.referenceNotes.some((note) => note.toLowerCase().includes(query.toLowerCase()))
+  ))
+
+  return <div className="workspace-page page-enter">
+    <PageHeader eyebrow="Study materials" title="Topic notes" description="Review the notes authored for each published topic. Open a topic for its lesson, worked example, assignments, and quiz." action={<div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes" aria-label="Search notes" /></div>} />
+    {loading && <p className="curriculum-state" role="status">Loading topic notes...</p>}
+    {error && <p className="curriculum-state problem-error" role="alert">{error}</p>}
+    {!loading && !error && filteredTopics.length === 0 && <p className="curriculum-state">{topics.length ? 'No notes match your search.' : 'No authored topic notes are available yet.'}</p>}
+    <div className="notes-topic-list">{filteredTopics.map((topic) => <article className="panel notes-topic-card" key={topic.id}>
+      <header className="notes-topic-heading"><div><p className="eyebrow">{topic.category} · {topic.level}</p><h3>{topic.name}</h3></div><Link className="text-button" to={`/topics/${topic.id}`}>Open lesson <ArrowRight size={14} /></Link></header>
+      <ul>{topic.referenceNotes.map((note) => <li key={note}>{note}</li>)}</ul>
+      {topic.referenceLinks.length > 0 && <div className="curriculum-links"><h4>Further reading</h4>{topic.referenceLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label}<span>{link.kind}</span></a>)}</div>}
+    </article>)}</div>
   </div>
 }
 
@@ -280,6 +329,10 @@ function Practice() {
   const submissionResult = submissionResults[selectedAssignmentId]
   const submissionError = submissionErrors[selectedAssignmentId] || ''
   const submissionSourceBytes = new TextEncoder().encode(submissionSource).length
+  const submissionHistory = progress.recentActivity.filter((activity) => (
+    activity.id === selectedAssignmentId &&
+    ['assignment-passed', 'assignment-failed'].includes(activity.type)
+  ))
 
   const selectAssignment = (assignment) => {
     setSelectedAssignmentId(assignment.id)
@@ -350,12 +403,9 @@ function Practice() {
     try {
       const result = await submitJavaAssignment(selectedAssignment.id, submissionSource)
       setSubmissionResults((current) => ({ ...current, [selectedAssignment.id]: result }))
-      const passedProgress = markAssignmentPassed(progress, selectedAssignment.id, result)
-      if (passedProgress !== progress) {
-        const nextProgress = saveLearningProgress(passedProgress)
-        setProgress(nextProgress)
-        setCurriculum(await fetchCurriculum(nextProgress))
-      }
+      const nextProgress = saveLearningProgress(recordAssignmentAttempt(progress, selectedAssignment.id, result))
+      setProgress(nextProgress)
+      setCurriculum(await fetchCurriculum(nextProgress))
     } catch (requestError) {
       setSubmissionErrors((current) => ({
         ...current,
@@ -364,6 +414,21 @@ function Practice() {
     } finally {
       setSubmissionLoadingId('')
     }
+  }
+
+  const resetSubmission = () => {
+    if (!selectedAssignment || !starter?.starterCode) return
+    setSubmissionSources((current) => ({ ...current, [selectedAssignment.id]: starter.starterCode }))
+    setSubmissionResults((current) => {
+      const next = { ...current }
+      delete next[selectedAssignment.id]
+      return next
+    })
+    setSubmissionErrors((current) => {
+      const next = { ...current }
+      delete next[selectedAssignment.id]
+      return next
+    })
   }
 
   return <div className="workspace-page page-enter">
@@ -384,7 +449,8 @@ function Practice() {
           <section className="curriculum-section"><h4>Examples</h4>{selectedAssignment.examples.map((example, index) => <div className="generated-example" key={`${index}-${example.input}`}><p><strong>Input:</strong> {example.input}</p><p><strong>Output:</strong> {example.output}</p><p>{example.explanation}</p></div>)}</section>
           <section className="curriculum-section"><h4>Edge cases to consider</h4><ul>{selectedAssignment.edgeCases.map((edgeCase) => <li key={edgeCase}>{edgeCase}</li>)}</ul></section>
           <section className="curriculum-section"><div className="practice-hint-heading"><h4>Hints</h4><span>{shownHints + tutorHints.length} used · up to 3 levels</span></div>{selectedAssignment.hints.slice(0, shownHints).map((hint, index) => <p className="practice-hint" key={`${index}-${hint}`}>Hint {index + 1}: {hint}</p>)}{tutorHints.map((hint, index) => <p className="practice-hint tutor" key={`tutor-${index}`}>Tutor hint {index + 1}: {hint}</p>)}{hintError && <p className="problem-error" role="alert">{hintError}</p>}<div className="practice-hint-actions"><button className="quiet-button" onClick={() => setShownHints((count) => Math.min(count + 1, selectedAssignment.hints.length))} disabled={shownHints >= selectedAssignment.hints.length || shownHints + tutorHints.length >= 3}>Show next hint</button><button className="quiet-button" onClick={requestTutorHint} disabled={hintLoading || shownHints + tutorHints.length >= 3}>{hintLoading ? 'Thinking...' : 'Get AI hint'}</button><Link className="quiet-button" to="/tutor" state={{ topic: selectedAssignment.topicName, difficulty: selectedAssignment.difficulty, assignmentId: selectedAssignment.id }}><BrainCircuit size={15} /> Ask AI Tutor about this problem</Link></div></section>
-          <section className="curriculum-section"><h4>Java submission</h4>{starterLoading && <p className="muted" role="status">Loading starter code...</p>}{starterError && <p className="problem-error" role="alert">{starterError}</p>}{submissionError && <p className="problem-error" role="alert">{submissionError}</p>}{!starterLoading && starter && !starter.evaluationAvailable && <p className="muted" role="status">{starter.evaluationMessage || (starter.hasTests ? 'The isolated Java worker is unavailable. You can review the starter, but this server will not run your code.' : 'Automated evaluation is not available for this assignment yet.')}</p>}{starter?.starterCode && <><label className="submission-editor-label" htmlFor="java-submission">Java source <span>{submissionSourceBytes} / 24,000 bytes</span></label><textarea id="java-submission" className="java-submission-editor" value={submissionSource} maxLength={24000} spellCheck="false" onChange={(event) => { setSubmissionSources((current) => ({ ...current, [selectedAssignment.id]: event.target.value })); setSubmissionResults((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }); setSubmissionErrors((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }) }} aria-label="Java source code" /><button className="primary-button" onClick={submitAssignment} disabled={!starter.evaluationAvailable || submissionLoading || starterLoading || !submissionSource.trim() || submissionSourceBytes > 24000}>{submissionLoading ? 'Evaluating...' : starter.evaluationAvailable ? 'Submit / Evaluate' : 'Evaluation unavailable'}</button>{submissionLoading && <p className="muted" role="status">Running your solution against the assignment tests...</p>}</>}{submissionResult && <div className={`submission-result ${submissionResult.passed ? 'passed' : 'failed'}`} role="status"><strong>{submissionResult.passed ? 'Passed' : 'Failed'}</strong><p>{submissionResult.feedback}</p>{submissionResult.sampleTests && <p>Sample cases: {submissionResult.sampleTests.passed} / {submissionResult.sampleTests.total} passed</p>}{submissionResult.additionalTestsPassed !== undefined && <p>Additional checks: {submissionResult.additionalTestsPassed ? 'passed' : 'some failed'}</p>}{submissionResult.diagnostics?.map((diagnostic, index) => <p key={`${index}-${diagnostic.message}`}>{diagnostic.line ? `Line ${diagnostic.line}: ` : ''}{diagnostic.message}</p>)}</div>}</section>
+          <section className="curriculum-section"><h4>Java submission</h4>{starterLoading && <p className="muted" role="status">Loading starter code...</p>}{starterError && <p className="problem-error" role="alert">{starterError}</p>}{submissionError && <p className="problem-error" role="alert">{submissionError}</p>}{!starterLoading && starter && !starter.evaluationAvailable && <p className="muted" role="status">{starter.evaluationMessage || (starter.hasTests ? 'The isolated Java worker is unavailable. You can review the starter, but this server will not run your code.' : 'Automated evaluation is not available for this assignment yet.')}</p>}{starter?.starterCode && <><label className="submission-editor-label" htmlFor="java-submission">Java source <span>{submissionSourceBytes} / 24,000 bytes</span></label><textarea id="java-submission" className="java-submission-editor" value={submissionSource} maxLength={24000} spellCheck="false" onChange={(event) => { setSubmissionSources((current) => ({ ...current, [selectedAssignment.id]: event.target.value })); setSubmissionResults((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }); setSubmissionErrors((current) => { const next = { ...current }; delete next[selectedAssignment.id]; return next }) }} aria-label="Java source code" /><div className="practice-editor-actions"><button className="primary-button" onClick={submitAssignment} disabled={!starter.evaluationAvailable || submissionLoading || starterLoading || !submissionSource.trim() || submissionSourceBytes > 24000}>{submissionLoading ? 'Evaluating...' : starter.evaluationAvailable ? 'Submit / Evaluate' : 'Evaluation unavailable'}</button><button className="quiet-button" type="button" onClick={resetSubmission} disabled={submissionLoading || !starter.starterCode}>Reset code</button></div>{submissionLoading && <p className="muted" role="status">Running your solution against the assignment tests...</p>}</>}{submissionResult && <div className={`submission-result ${submissionResult.passed ? 'passed' : 'failed'}`} role="status"><strong>{submissionResult.passed ? 'Passed' : 'Failed'}</strong><p>{submissionResult.feedback}</p>{submissionResult.sampleTests && <p>Sample cases: {submissionResult.sampleTests.passed} / {submissionResult.sampleTests.total} passed</p>}{submissionResult.additionalTestsPassed !== undefined && <p>Additional checks: {submissionResult.additionalTestsPassed ? 'passed' : 'some failed'}</p>}{submissionResult.diagnostics?.map((diagnostic, index) => <p key={`${index}-${diagnostic.message}`}>{diagnostic.line ? `Line ${diagnostic.line}: ` : ''}{diagnostic.message}</p>)}</div>}</section>
+          <section className="curriculum-section submission-history"><h4>Submission history</h4>{submissionHistory.length === 0 ? <p className="muted">No Java evaluation attempts recorded for this assignment.</p> : <ol>{submissionHistory.map((attempt) => <li key={`${attempt.type}-${attempt.at}`}><span className={attempt.type === 'assignment-passed' ? 'history-passed' : 'history-failed'}>{attempt.type === 'assignment-passed' ? 'Passed' : 'Not passed'}</span><time dateTime={attempt.at}>{new Date(attempt.at).toLocaleString()}</time></li>)}</ol>}</section>
         </article>
       </div>}
     </>}
@@ -395,17 +461,19 @@ function Practice() {
 
 function Progress() {
   const [topics, setTopics] = useState([])
+  const [progress] = useState(loadLearningProgress)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetchCurriculum(loadLearningProgress()).then(setTopics).catch((requestError) => setError(requestError.message))
-  }, [])
+    fetchCurriculum(progress).then(setTopics).catch((requestError) => setError(requestError.message))
+  }, [progress])
 
   const counts = topics.reduce((result, topic) => {
     result[topic.progression.status] += 1
     return result
   }, { locked: 0, available: 0, 'in-progress': 0, completed: 0 })
   const startedTopics = topics.filter((topic) => topic.progression.status === 'in-progress' || topic.progression.status === 'completed')
+  const summary = summarizeLearning(topics, progress)
 
   return <div className="workspace-page page-enter">
     <PageHeader eyebrow="Your trajectory" title="Progress" description="Progress is based on lesson views, evaluator-confirmed assignment completion, and passed quizzes stored in this browser." />
@@ -413,42 +481,94 @@ function Progress() {
     {!error && topics.length === 0 && <p className="curriculum-state" role="status">Loading progress...</p>}
     {topics.length > 0 && <>
       <section className="roadmap-summary">
+        <article className="summary-stat"><strong>{summary.problemsSolved}</strong><span>problems solved</span></article>
+        <article className="summary-stat"><strong>{summary.accuracy === null ? '—' : `${summary.accuracy}%`}</strong><span>evaluator pass rate · {summary.assignmentAttempts} attempts</span></article>
+        <article className="summary-stat"><strong>{summary.streak} day{summary.streak === 1 ? '' : 's'}</strong><span>current learning streak</span></article>
+      </section>
+      <section className="roadmap-summary">
         {Object.entries(counts).map(([status, count]) => <article className="summary-stat" key={status}><span className={`status-dot state-${status}`} /><div><strong>{count}</strong><span>{status.replace('-', ' ')}</span></div></article>)}
       </section>
       {startedTopics.length === 0
         ? <section className="curriculum-state"><h3>No topic progress yet</h3><p>Start with Programming Fundamentals. Nothing is marked complete until you record learner activity.</p><Link className="primary-button" to="/topics">Open topics <ArrowRight size={14} /></Link></section>
-        : <ol className="roadmap-learning-list">{startedTopics.map((topic) => <li className={`roadmap-learning-item status-${topic.progression.status}`} key={topic.id}><div className="roadmap-learning-copy"><div className="curriculum-lesson-header"><div><h3>{topic.name}</h3></div><span className={`curriculum-status state-${topic.progression.status}`}>{topic.progression.status.replace('-', ' ')}</span></div><p>Lesson {topic.progression.lessonViewed ? 'viewed' : 'not viewed'} · {topic.progression.completedAssignmentIds.length} / {topic.completionRequirements.assignmentIds.length} assignments · {topic.progression.passedQuizIds.length} / {topic.completionRequirements.quizIds.length} quizzes</p></div></li>)}</ol>}
+        : <ol className="roadmap-learning-list">{startedTopics.map((topic) => <li className={`roadmap-learning-item status-${topic.progression.status}`} key={topic.id}><div className="roadmap-learning-copy"><div className="curriculum-lesson-header"><div><h3>{topic.name}</h3></div><span className={`curriculum-status state-${topic.progression.status}`}>{topic.progression.status.replace('-', ' ')}</span></div><p>Lesson {topic.progression.lessonViewed ? 'viewed' : 'not viewed'} · {topic.progression.completedAssignmentIds.length} / {topic.completionRequirements.assignmentIds.length} assignments · {topic.progression.passedQuizIds.length} / {topic.completionRequirements.quizIds.length} quizzes</p><Link className="text-button" to={`/topics/${topic.id}`}>Continue topic <ArrowRight size={14} /></Link></div></li>)}</ol>}
     </>}
   </div>
 }
 
 function Profile() {
+  const [profile, setProfile] = useState(loadLearnerProfile)
+  const [displayName, setDisplayName] = useState(profile?.displayName || '')
+  const [learningGoal, setLearningGoal] = useState(profile?.learningGoal || 'Learn data structures and algorithms in Java')
+  const [topics, setTopics] = useState([])
+  const [progress] = useState(loadLearningProgress)
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetchCurriculum(progress)
+      .then((curriculum) => {
+        if (active) setTopics(curriculum)
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message || 'Could not load learning statistics.')
+      })
+    return () => {
+      active = false
+    }
+  }, [progress])
+
+  const summary = summarizeLearning(topics, progress)
+  const saveProfile = (event) => {
+    event.preventDefault()
+    setError('')
+    setSaved(false)
+    try {
+      const nextProfile = saveLearnerProfile({ displayName, learningGoal })
+      setProfile(nextProfile)
+      setSaved(true)
+    } catch (profileError) {
+      setError(profileError.message || 'Could not save your profile.')
+    }
+  }
+
   return <div className="workspace-page page-enter">
-    <PageHeader eyebrow="Your workspace" title="Profile" description="Account details and learning preferences will be connected in a future authentication update." />
+    <PageHeader eyebrow="Your workspace" title="Profile" description="Manage the local demo profile and review real learning activity from this browser." />
     <div className="profile-grid">
       <section className="panel profile-card">
         <div className="profile-identity">
           <div className="profile-avatar"><UserRound size={24} /></div>
-          <div><h3>Account setup coming later</h3><p>No account is currently connected.</p><span className="status">Not connected</span></div>
+          <div><h3>{profile?.displayName || 'Guest learner'}</h3><p>{profile ? 'Demo profile saved in this browser.' : 'Create a local demo profile to personalize your workspace.'}</p><span className="status">{profile ? 'Demo user' : 'Guest'}</span></div>
         </div>
-        <div className="profile-fields">
-          <label>Display name<input disabled placeholder="Available after account setup" /></label>
-          <label>Learning goal<select disabled defaultValue=""><option value="">Available after account setup</option></select></label>
-        </div>
-        <p className="profile-placeholder-note" role="status">Real profile details and saved preferences will appear here after authentication is configured.</p>
+        <form className="profile-fields" onSubmit={saveProfile}>
+          <label htmlFor="profile-display-name">Display name<input id="profile-display-name" value={displayName} maxLength={60} onChange={(event) => { setDisplayName(event.target.value); setSaved(false) }} required /></label>
+          <label htmlFor="profile-learning-goal">Learning goal<input id="profile-learning-goal" value={learningGoal} maxLength={120} onChange={(event) => { setLearningGoal(event.target.value); setSaved(false) }} required /></label>
+          {error && <p className="profile-placeholder-note problem-error" role="alert">{error}</p>}
+          {saved && <p className="profile-placeholder-note" role="status">Demo profile saved.</p>}
+          <button className="primary-button profile-save" type="submit">{profile ? 'Save profile' : 'Create demo profile'} <ArrowRight size={14} /></button>
+        </form>
       </section>
-      <section className="panel preferences">
-        <div className="panel-heading"><div><p className="eyebrow">Preferences</p><h3>Learning setup</h3></div><Settings size={18} className="muted-icon" /></div>
-        {[['Daily reminder', 'A short nudge keeps your streak alive.'], ['Hints before solutions', 'Protect the thinking time that matters.'], ['Weekly progress email', 'A Sunday snapshot of your momentum.']].map(([title, detail], index) => <label className="preference" key={title}><span><strong>{title}</strong><small>{detail}</small></span><input type="checkbox" defaultChecked={index < 2} /></label>)}
-        <p className="profile-placeholder-note">Preference controls are previews and are not saved yet.</p>
+      <section className="panel profile-stat-card">
+        <div className="panel-heading"><div><p className="eyebrow">Learning record</p><h3>Saved progress</h3></div></div>
+        {error && <p className="profile-placeholder-note problem-error" role="alert">{error}</p>}
+        <dl className="profile-stat-list">
+          <div><dt>Topics completed</dt><dd>{summary.completedTopics}</dd></div>
+          <div><dt>Topics in progress</dt><dd>{summary.inProgressTopics}</dd></div>
+          <div><dt>Problems solved</dt><dd>{summary.problemsSolved}</dd></div>
+          <div><dt>Evaluator pass rate</dt><dd>{summary.accuracy === null ? 'Not measured' : `${summary.accuracy}%`}</dd></div>
+          <div><dt>Learning streak</dt><dd>{summary.streak} day{summary.streak === 1 ? '' : 's'}</dd></div>
+        </dl>
+        <p className="profile-placeholder-note">Progress stays in this browser and is not synced to an account.</p>
       </section>
     </div>
   </div>
 }
 
 export default function WorkspacePages({ page }) {
+  const { topicId } = useParams()
   if (page === 'roadmap') return <Roadmap />
-  if (page === 'topics') return <Topics />
+  if (page === 'topics') return <Topics routeTopicId={topicId} />
+  if (page === 'notes') return <Notes />
   if (page === 'practice') return <Practice />
   if (page === 'progress') return <Progress />
   return <Profile />

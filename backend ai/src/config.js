@@ -7,8 +7,12 @@ function positiveInteger(value, fallback, maximum) {
     : fallback
 }
 
+const defaultPort = process.env.npm_lifecycle_event === 'dev'
+  ? 3001
+  : process.env.PORT || 3001
+
 export const config = {
-  port: Number(process.env.PORT || 3001),
+  port: Number(process.env.BACKEND_PORT || defaultPort),
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://127.0.0.1:5173',
   aiProvider: (process.env.AI_PROVIDER || 'local').toLowerCase(),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',

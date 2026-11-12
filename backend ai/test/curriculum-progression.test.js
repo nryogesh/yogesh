@@ -35,6 +35,17 @@ test('curriculum locks topics until all prerequisite requirements are complete',
   assert.equal(findTopic(unlocked, 'recursion').progression.status, 'available')
 })
 
+test('every published topic exposes a Java example, expected output and complexity note', () => {
+  const publishedTopics = getPublicCurriculum().filter((topic) => topic.status === 'published')
+
+  assert.ok(publishedTopics.length > 0)
+  for (const topic of publishedTopics) {
+    assert.ok(topic.javaExample?.code.includes('public class Main'), `${topic.id} should include runnable Java`)
+    assert.ok(topic.javaExample.expectedOutput, `${topic.id} should include expected output`)
+    assert.ok(topic.complexityNote, `${topic.id} should explain complexity`)
+  }
+})
+
 test('topic completion requires a viewed lesson, all assignments and a passed quiz', () => {
   const topic = findTopic(getPublicCurriculum(), 'programming-fundamentals')
   assert.deepEqual(topic.completionRequirements, {

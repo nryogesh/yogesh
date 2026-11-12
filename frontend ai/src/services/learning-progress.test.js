@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { loadLearningProgress, markAssignmentPassed, saveLearningProgress } from './learning-progress.js'
+import { getLearningStreak, loadLearningProgress, markAssignmentPassed, recordAssignmentAttempt, saveLearningProgress } from './learning-progress.js'
 
 test('assignment progress changes only after an evaluator-confirmed pass', () => {
   const progress = {
@@ -42,9 +42,39 @@ test('legacy self-reported assignment completion is not retained after evaluatio
     assert.deepEqual(migrated.passedQuizzes, ['pf-quiz-1'])
 
     saveLearningProgress(migrated)
-    assert.equal(JSON.parse(storage.get('dsa-mentor-learning-progress')).version, 2)
+    assert.equal(JSON.parse(storage.get('dsa-mentor-learning-progress')).version, 3)
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor)
     else delete globalThis.localStorage
   }
+})
+
+test('assignment evaluation attempts and passes are tracked independently from unique solved problems', () => {
+  const progress = {
+    viewedLessons: [],
+    completedAssignments: [],
+    passedQuizzes: [],
+    assignmentStats: { attempts: 0, passes: 0 },
+    recentActivity: [],
+  }
+  const failed = recordAssignmentAttempt(progress, 'array-sum', { success: true, status: 'compile_error', passed: false })
+  const passed = recordAssignmentAttempt(failed, 'array-sum', { success: true, status: 'passed', passed: true })
+  const repeatedPass = recordAssignmentAttempt(passed, 'array-sum', { success: true, status: 'passed', passed: true })
+
+  assert.deepEqual(repeatedPass.assignmentStats, { attempts: 3, passes: 2 })
+  assert.deepEqual(repeatedPass.completedAssignments, ['array-sum'])
+  assert.equal(repeatedPass.recentActivity.length, 3)
+})
+
+test('learning streak counts consecutive days with recorded activity only', () => {
+  const progress = {
+    recentActivity: [
+      { type: 'lesson-viewed', id: 'arrays', at: '2026-11-12T10:00:00.000Z' },
+      { type: 'assignment-passed', id: 'array-sum', at: '2026-11-11T10:00:00.000Z' },
+      { type: 'quiz-passed', id: 'arrays-quiz', at: '2026-11-09T10:00:00.000Z' },
+    ],
+  }
+
+  assert.equal(getLearningStreak(progress, new Date('2026-11-12T14:00:00.000Z')), 2)
+  assert.equal(getLearningStreak(progress, new Date('2026-11-15T14:00:00.000Z')), 0)
 })

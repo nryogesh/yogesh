@@ -83,6 +83,7 @@ export default function Tutor() {
   const [messagesByTopic, setMessagesByTopic] = useState(() => ({
     [selectedTopic]: hasTopicContext ? [] : initialMessages,
   }))
+
   const messages = messagesByTopic[selectedTopic] || []
   const setMessages = (update) => setMessagesByTopic((current) => ({
     ...current,
@@ -101,7 +102,7 @@ export default function Tutor() {
   useEffect(() => {
     let active = true
     checkHealth()
-      .then(({ available, fallback, mode, label, provider }) => {
+      .then(({ available, configured, mode, label, provider }) => {
         if (!active) return
 
         if (mode === 'fallback') {
@@ -110,9 +111,9 @@ export default function Tutor() {
           return
         }
 
-        if (available || fallback) {
-          setProviderState('ready')
-          setProviderLabel(label || `${provider || 'Mentor'} ready`)
+        if (configured ?? available) {
+          setProviderState('configured')
+          setProviderLabel(label || `${provider || 'Mentor'} configured; live generation not verified`)
           return
         }
 
@@ -174,7 +175,12 @@ export default function Tutor() {
         hintStage: Math.min(3, messages.filter((message) => message.role === 'assistant').length + 1),
         conversationHistory: history,
       })
-      setMessages((current) => appendTutorMessage(current, { id: nextMessageId++, role: 'assistant', content: result.hint }))
+      setMessages((current) => appendTutorMessage(current, {
+        id: nextMessageId++,
+        role: 'assistant',
+        content: result.hint,
+        fallback: result.fallback === true,
+      }))
     } catch (error) {
       setMessages((current) => appendTutorMessage(current, { id: nextMessageId++, role: 'assistant', content: error.message || 'The mentor could not provide a hint.' }))
     } finally {
@@ -225,5 +231,5 @@ export default function Tutor() {
     sendMessage(getActionPrompt(label, selectedTopic))
   }
 
-  return <div className="tutor-page page-enter"><section className="tutor-intro"><div><p className="eyebrow accent-eyebrow"><span className="live-dot" /> Your personal mentor</p><h2>Think it through together.</h2><p className="muted">Ask questions, test your understanding, and get unstuck without skipping the learning.</p></div><div className="tutor-status" role="status" aria-live="polite"><span className="status-online" style={{ backgroundColor: providerState === 'ready' ? 'var(--accent)' : providerState === 'fallback' ? '#f7b267' : providerState === 'checking' ? 'var(--muted)' : '#e27668' }} />{providerState === 'checking' ? 'Checking AI provider...' : providerLabel}</div></section><div className="tutor-layout"><section className="chat-panel panel"><div className="chat-heading"><div className="mentor-identity"><div className="mentor-avatar"><BrainCircuit size={21} /></div><div><strong>DSA Mentor</strong><span>Guiding your {selectedTopic} session</span></div></div><button className="icon-button" aria-label="More tutor options"><ArrowUpRight size={18} /></button></div><div className="messages" aria-live="polite">{messages.map((message) => <Message key={message.id} message={message} />)}{typing && <div className="typing"><span /><span /><span /> Mentor is thinking</div>}</div>    <div className="chat-composer"><div className="quick-actions">{actions.map(({ label, icon: Icon }) => <button key={label} onClick={() => handleQuickAction(label)} disabled={typing}><Icon size={14} />{label}</button>)}</div><div className="input-wrap"><textarea value={input} onChange={(event) => { inputRef.current = event.target.value; setInput(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(inputRef.current) } }} placeholder={`Ask your DSA mentor about ${selectedTopic}...`} aria-label="Ask your DSA mentor anything" rows="1" /><button className="send-button" onClick={() => sendMessage(inputRef.current)} disabled={!input.trim() || typing} aria-label="Send message"><Send size={17} /></button></div><div className="composer-note">Press Enter to send <span>·</span> Shift + Enter for a new line</div></div></section><aside className="context-panel"><div className="context-header"><div><p className="eyebrow">Learning context</p><h3>Current lesson</h3></div></div><div className="context-focus"><div className="context-focus-top"><span>Topic</span><Code2 size={17} /></div><strong>{selectedTopic}</strong><span>{selectedDifficulty} level</span></div><div className="context-block"><p>Use the chat to ask a question, request a simpler explanation, or work through an example for this topic.</p></div></aside></div></div>
+  return <div className="tutor-page page-enter"><section className="tutor-intro"><div><p className="eyebrow accent-eyebrow"><span className="live-dot" /> Your personal mentor</p><h2>Think it through together.</h2><p className="muted">Ask questions, test your understanding, and get unstuck without skipping the learning.</p></div><div className="tutor-status" role="status" aria-live="polite"><span className="status-online" style={{ backgroundColor: providerState === 'ready' ? 'var(--accent)' : providerState === 'fallback' ? '#f7b267' : providerState === 'checking' || providerState === 'configured' ? 'var(--muted)' : '#e27668' }} />{providerState === 'checking' ? 'Checking AI provider...' : providerLabel}</div></section><div className="tutor-layout"><section className="chat-panel panel"><div className="chat-heading"><div className="mentor-identity"><div className="mentor-avatar"><BrainCircuit size={21} /></div><div><strong>DSA Mentor</strong><span>Guiding your {selectedTopic} session</span></div></div><button className="icon-button" aria-label="More tutor options"><ArrowUpRight size={18} /></button></div><div className="messages" aria-live="polite">{messages.map((message) => <Message key={message.id} message={message} />)}{typing && <div className="typing"><span /><span /><span /> Mentor is thinking</div>}</div>    <div className="chat-composer"><div className="quick-actions">{actions.map(({ label, icon: Icon }) => <button key={label} onClick={() => handleQuickAction(label)} disabled={typing}><Icon size={14} />{label}</button>)}</div><div className="input-wrap"><textarea value={input} onChange={(event) => { inputRef.current = event.target.value; setInput(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(inputRef.current) } }} placeholder={`Ask your DSA mentor about ${selectedTopic}...`} aria-label="Ask your DSA mentor anything" rows="1" /><button className="send-button" onClick={() => sendMessage(inputRef.current)} disabled={!input.trim() || typing} aria-label="Send message"><Send size={17} /></button></div><div className="composer-note">Press Enter to send <span>·</span> Shift + Enter for a new line</div></div></section><aside className="context-panel"><div className="context-header"><div><p className="eyebrow">Learning context</p><h3>Current lesson</h3></div></div><div className="context-focus"><div className="context-focus-top"><span>Topic</span><Code2 size={17} /></div><strong>{selectedTopic}</strong><span>{selectedDifficulty} level</span></div><div className="context-block"><p>Use the chat to ask a question, request a simpler explanation, or work through an example for this topic.</p></div></aside></div></div>
 }
